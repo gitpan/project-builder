@@ -1,0 +1,3 @@
+#!/bin/bash
+export LANGUAGE=C
+egrep -r $* . | egrep -v '\.svn|~:|binary|/CVS/|/tags/' 
