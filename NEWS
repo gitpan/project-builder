@@ -2,6 +2,9 @@
 
 PB CHANGES
 
+0.9.7.1 (2009-07-05)
+- Fix a critical bug on pb, where a module was loaded optionaly with use instead of require (prevents update of VMs) (Bruno Cornec)
+
 0.9.7 (2009-07-04)
 - vm commands support the -i option now. (Bruno Cornec)
 - Create a test2pkg, test2vm, test2ve commands (Bruno Cornec)

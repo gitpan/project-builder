@@ -1432,7 +1432,7 @@ EOF
 			my ($vmmonport,$vmtype) = pb_conf_get("vmmonport","vmtype");
 			# For monitoring control
 			if ((($vmtype->{$ENV{'PBPROJ'}}) eq "kvm") || (($vmtype->{$ENV{'PBPROJ'}}) eq "qemu")) {
-				use Net::Telnet;
+				require Net::Telnet;
 				my $t = new Net::Telnet (Timeout => 120, Host => "localhost", Port => $vmmonport->{$ENV{'PBPROJ'}}) || die "Unable to dialog on the monitor";
 				# move to monitor mode
 				my @lines = $t->cmd("c");
