@@ -2,6 +2,34 @@
 
 PB CHANGES
 
+0.9.9 (2010-04-29)
+- Adds debootstrap and rpmbootstrap support for VE (Bruno Cornec)
+- Improved pb presentation with Solaris integration for HP TES 2009, Fosdem 2010 and Solutions Linux 2010 (Bruno Cornec)
+- Adds the Project Builder Lab delivered for the TES 2009 inside HP (Bruno Cornec)
+- Preliminary version of a Web site (Bruno Cornec)
+- Fix a build error for deb based packages (macro definitions missing !) (Bruno Cornec)
+- Fix a bug in newve, by calling pb_distrib_init earlier to have the loading of the pb.conf main conf file, used to install default packages (Bruno Cornec)
+- Use pbsnap in pb_script2v instead of forcing no snapshot (Bruno Cornec)
+- use x86_64 arch for debian, and only amd64 for debootstrap call (Bruno Cornec)
+- debootstrap doesn't create a /etc/hosts file, so copy the local one in the VE (Bruno Cornec)
+- Previous snapshot removed before trying to create a new one to avoid useless extraction (Bruno Cornec)
+- Mandriva uses in fact genhdlist2 to generate indexes and hdlist.cz is now under media_info (Bruno Cornec)
+- Since SLES 11 the sudoers file is again back to 440 (Bruno Cornec)
+- Fixes to support ia64 chroot with centos5 - ongoing (Bruno Cornec)
+
+0.9.8 (2009-11-29)
+- Improves Debian support by a/ allowing PBDESC to be used in control file with space prepended. b/ prepend 0 to non digit versions such as devel. c/ creating debian pbfilter files for PBDEBSTD and PBDEBCOMP macros used in control (Bruno Cornec)
+- Uses pbtag for ebuild and pkg packages (Bruno Cornec)
+- Improves setupvm for RHEL 3 (Bruno Cornec)
+- Add support for Fedora 12, Mandriva 2010.0, OpenSuSE 11.2, Ubuntu 9.10 (Bruno Cornec)
+- Updates Module-Build to 0.35 version (Bruno Cornec)
+- Do not add conf files if already present in the list (changing pbconffiles into a hash for that to still keep order as this is mandatory) (Bruno Cornec)
+- Improve some testver usages and fix #51. Now passing false to testver works (Bruno Cornec)
+- ChangeLog file now created by pb_cms_log (Bruno Cornec)
+- Adds Solaris port, Solaris build files, generation of Solaris build file skeleton (Bruno Cornec)
+- Force to always build for the local distribution by default (Bruno Cornec)
+- Create a ~/.pbrc as template if no previous one was there - Fix #47 (Bruno Cornec)
+
 0.9.7.1 (2009-07-05)
 - Fix a critical bug on pb, where a module was loaded optionaly with use instead of require (prevents update of VMs) (Bruno Cornec)
 

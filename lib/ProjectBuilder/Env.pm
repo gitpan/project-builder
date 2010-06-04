@@ -30,7 +30,7 @@ use Exporter;
 # any code which uses this module.
  
 our @ISA = qw(Exporter);
-our @EXPORT = qw(pb_env_init);
+our @EXPORT = qw(pb_env_init pb_env_init_pbrc);
 
 =pod
 
@@ -45,6 +45,63 @@ This modules provides environment functions suitable for pbinit calls.
 =head1 USAGE
 
 =over 4
+
+=item B<pb_env_init_pbrc>
+
+This function setup/use the configuration file in the HOME directory
+It sets up environment variables (PBETC) 
+
+=cut
+
+sub pb_env_init_pbrc {
+
+$ENV{'PBETC'} = "$ENV{'HOME'}/.pbrc";
+
+if (! -f $ENV{'PBETC'}) {
+	pb_log(0, "No existing $ENV{'PBETC'} found, creating one as template\n");
+	open(PBRC, "> $ENV{'PBETC'}") || die "Unable to create $ENV{'PBETC'}";
+	print PBRC << "EOF";
+#
+# Define for each project the URL of its pbconf repository
+# No default option allowed here as they need to be all different
+#
+#pbconfurl example = svn+ssh://svn.example.org/svn/pb/projects/example/pbconf
+#pbconfurl pb = svn+ssh://svn.project-builder.org/mondo/svn/pb/pbconf
+
+# Under that dir will take place everything related to pb
+# If you want to use VMs/chroot/..., then use \$ENV{'HOME'} to make it portable
+# to your VMs/chroot/...
+# if not defined then /var/cache
+#pbdefdir default = \$ENV{'HOME'}/pb/projects
+#pbdefdir pb = \$ENV{'HOME'}
+
+# If not defined, pbconfdir is under pbdefdir/pbproj/pbconf
+#pbconfdir pb = \$ENV{'HOME'}/pb/pbconf
+
+# If not defined, pbprojdir is under pbdefdir/pbproj
+# Only defined if we have access to the dev of the project
+#pbprojdir example = \$ENV{'HOME'}/example/svn
+
+# We have commit acces to these
+#pburl example = cvs+ssh://user\@example.cvs.sourceforge.net:/cvsroot/example
+#pburl pb = svn+ssh://svn.project-builder.org/mondo/svn/pb
+
+# I mask my real login on the ssh machines here
+#sshlogin example = user
+
+# where to find Build System infos:
+#vmpath default = /home/qemu
+#vepath default = /home/rinse
+
+# Overwrite generic setup
+#vmport pb = 2223
+#vmport example = 2224
+EOF
+	}
+
+# We only have one configuration file for now.
+pb_conf_add("$ENV{'PBETC'}");
+}
 
 =item B<pb_env_init>
 
@@ -64,10 +121,7 @@ my $action=shift;
 my $ver;
 my $tag;
 
-$ENV{'PBETC'} = "$ENV{'HOME'}/.pbrc";
-
-# We only have one configuration file for now.
-pb_conf_add("$ENV{'PBETC'}");
+pb_env_init_pbrc();
 
 #
 # Check project name
@@ -110,9 +164,9 @@ if (not defined ($pbconf{$ENV{'PBPROJ'}})) {
 
 # Adds a potential conf file now as it's less 
 # important than the project conf file
-my ($vmpath,$vepath) = pb_conf_get("vmpath","vepath");
-pb_conf_add("$vmpath->{$ENV{'PBPROJ'}}/.pbrc") if (-f "$vmpath->{$ENV{'PBPROJ'}}/.pbrc");
-pb_conf_add("$vepath->{$ENV{'PBPROJ'}}/.pbrc") if (-f "$vepath->{$ENV{'PBPROJ'}}/.pbrc");
+my ($vmpath,$vepath) = pb_conf_get_if("vmpath","vepath");
+pb_conf_add("$vmpath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $vmpath) && (-f "$vmpath->{$ENV{'PBPROJ'}}/.pbrc"));
+pb_conf_add("$vepath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $vepath) && (-f "$vepath->{$ENV{'PBPROJ'}}/.pbrc"));
 
 #
 # Detect the root dir for hosting all the content generated with pb
@@ -178,6 +232,9 @@ pb_log(2,"PBTMP: $ENV{'PBTMP'}\n");
 # Put under CMS the PBPROJ dir
 if ($action =~ /^newproj$/) {
 	if (! -d "$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}") {
+		# TODO: There is also the need to do 
+		# svn import "$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}" svn://repo
+		# in case it doesn't exist there
 		pb_mkdir_p("$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}") || die "Unable to recursively create $ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}";
 	}
 	pb_cms_add($pbconf{$ENV{'PBPROJ'}},"$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}");
@@ -266,6 +323,7 @@ if (($action =~ /^cms2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || 
 	if ((-f "$ENV{'PBROOTDIR'}/$ENV{'PBPROJ'}.pb") and (not defined $pbinit)) {
 
 		# List of pkg to build by default (mandatory)
+		# TODO: projtag could be with a 1 default value
 		my ($defpkgdir,$pbpackager, $pkgv, $pkgt) = pb_conf_get("defpkgdir","pbpackager","projver","projtag");
 		# List of additional pkg to build when all is called (optional)
 		# Valid version names (optional)
@@ -369,7 +427,7 @@ if (($action =~ /^cms2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || 
 # a .vmtype extension will be added to the resulting string
 # a QEMU rhel-3-i286 here means that the VM will be named rhel-3-i386.qemu
 #
-#vmlist $ENV{'PBPROJ'} = mandrake-10.1-i386,mandrake-10.2-i386,mandriva-2006.0-i386,mandriva-2007.0-i386,mandriva-2007.1-i386,mandriva-2008.0-i386,redhat-7.3-i386,redhat-9-i386,fedora-4-i386,fedora-5-i386,fedora-6-i386,fedora-7-i386,fedora-8-i386,rhel-3-i386,rhel-4-i386,rhel-5-i386,suse-10.0-i386,suse-10.1-i386,suse-10.2-i386,suse-10.3-i386,sles-9-i386,sles-10-i386,gentoo-nover-i386,debian-3.1-i386,debian-4.0-i386,ubuntu-6.06-i386,ubuntu-7.04-i386,ubuntu-7.10-i386,mandriva-2007.0-x86_64,mandriva-2007.1-x86_64,mandriva-2008.0-x86_64,fedora-6-x86_64,fedora-7-x86_64,fedora-8-x86_64,rhel-4-x86_64,rhel-5-x86_64,suse-10.2-x86_64,suse-10.3-x86_64,sles-10-x86_64,gentoo-nover-x86_64,debian-4.0-x86_64,ubuntu-7.04-x86_64,ubuntu-7.10-x86_64
+#vmlist $ENV{'PBPROJ'} = mandrake-10.1-i386,mandrake-10.2-i386,mandriva-2006.0-i386,mandriva-2007.0-i386,mandriva-2007.1-i386,mandriva-2008.0-i386,redhat-7.3-i386,redhat-9-i386,fedora-4-i386,fedora-5-i386,fedora-6-i386,fedora-7-i386,fedora-8-i386,rhel-3-i386,rhel-4-i386,rhel-5-i386,suse-10.0-i386,suse-10.1-i386,suse-10.2-i386,suse-10.3-i386,sles-9-i386,sles-10-i386,gentoo-nover-i386,debian-3.1-i386,debian-4.0-i386,ubuntu-6.06-i386,ubuntu-7.04-i386,ubuntu-7.10-i386,mandriva-2007.0-x86_64,mandriva-2007.1-x86_64,mandriva-2008.0-x86_64,fedora-6-x86_64,fedora-7-x86_64,fedora-8-x86_64,rhel-4-x86_64,rhel-5-x86_64,suse-10.2-x86_64,suse-10.3-x86_64,sles-10-x86_64,gentoo-nover-x86_64,debian-4.0-x86_64,ubuntu-7.04-x86_64,ubuntu-7.10-x86_64,solaris-10-x86_64
 
 #
 # Valid values for vmtype are
@@ -406,8 +464,8 @@ if (($action =~ /^cms2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || 
 #vetype $ENV{'PBPROJ'} = chroot
 #ventp default = pool.ntp.org
 #velogin $ENV{'PBPROJ'} = pb
-#vepath $ENV{'PBPROJ'} = /var/lib/mock
-#veconf $ENV{'PBPROJ'} = /etc/mock
+#vepath $ENV{'PBPROJ'} = /var/cache/rpmbootstrap
+#rbsconf $ENV{'PBPROJ'} = /etc/mock
 #verebuild $ENV{'PBPROJ'} = false
 
 #
@@ -490,9 +548,6 @@ filter PBVER = \$pb->{'ver'}
 # PBDATE is replaced by the date (\$pb->{'date'} in code)
 filter PBDATE = \$pb->{'date'}
 
-# PBLOG is replaced by the changelog if value is yes
-#filter PBLOG = yes
-
 # PBPATCHSRC is replaced by the patches names if value is yes
 #filter PBPATCHSRC = yes
 
@@ -518,10 +573,18 @@ filter PBPROJ = \$pb->{'proj'}
 filter PBPACKAGER = \$pb->{'packager'}
 
 # PBDESC contains the description of the package
-#filter PBDESC = "Bla-Bla"
+#filter PBDESC = Bla-Bla
+
+# PBSUMMARY contains a short single line description of the package
+#filter PBSUMMARY = Bla
 
 # PBURL contains the URL of the Web site of the project
 #filter PBURL = http://www.$ENV{'PBPROJ'}.org
+
+# PBLOG is replaced by the changelog if value is yes
+# and should be last as when used we need the %pb hash filled
+#filter PBLOG = yes
+
 EOF
 			close(CONF);
 			open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/rpm.pbf") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/rpm.pbf";
@@ -602,7 +665,7 @@ EOF
 filter PBGRP = utils
 
 # PBLIC is replaced by the license of the application
-# Cf:
+# Cf: http://www.debian.org/legal/licenses/
 #filter PBLIC = GPL
 
 # PBDEP is replaced by the list of dependencies
@@ -613,6 +676,36 @@ filter PBGRP = utils
 
 # PBREC is replaced by the list of recommandations
 #filter PBREC =
+
+EOF
+			close(CONF);
+			open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/debian-4.0.pbf") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/debian-4.0.pbf";
+			print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for debian build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.6.1
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 5
+
+EOF
+			close(CONF);
+			open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/debian-5.0.pbf") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/debian-5.0.pbf";
+			print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for debian build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.8.0
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 7
 
 EOF
 			close(CONF);
@@ -645,23 +738,27 @@ EOF
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/deb/control") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/deb/control";
 				print CONF << "EOF";
 Source: PBPKG
+# http://www.debian.org/doc/debian-policy/ch-archive.html#s-subsections
 Section: PBGRP
 Priority: optional
 Maintainer: PBPACKAGER
 Build-Depends: debhelper (>= 4.2.20), PBDEP
-Standards-Version: 3.6.1
+Standards-Version: PBDEBSTD
+Vcs-Svn: svn://svn.PBPROJ.org/svn/PBVER/PBPKG
+Vcs-Browser: http://trac.PBPROJ.org/browser/PBVER/PBPKG
+Homepage: PBURL
 
 Package: PBPKG
 Architecture: amd64 i386 ia64
+# http://www.debian.org/doc/debian-policy/ch-archive.html#s-subsections
 Section: PBGRP
 Priority: optional
 Depends: \${shlibs:Depends}, \${misc:Depends}, PBDEP
 Recommends: PBREC
 Suggests: PBSUG
-Description: 
+Description: PBSUMMARY
  PBDESC
  .
- Homepage: PBURL
 
 EOF
 				close(CONF);
@@ -703,7 +800,7 @@ EOF
 				close(CONF);
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/deb/compat") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/deb/compat";
 				print CONF << "EOF";
-4
+PBDEBCOMP
 EOF
 				close(CONF);
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/deb/$pp.dirs") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/deb/$pp.dirs";
@@ -743,18 +840,18 @@ DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 CFLAGS = -Wall -g
 
 ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
-        CFLAGS += -O0
+	CFLAGS += -O0
 else
-        CFLAGS += -O2
+	CFLAGS += -O2
 endif
 ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
-        INSTALL_PROGRAM += -s
+	INSTALL_PROGRAM += -s
 endif
 config.status: configure
-        dh_testdir
+	dh_testdir
 
-        # Configure the package.
-        CFLAGS="$(CFLAGS)" ./configure --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) --prefix=/usr
+	# Configure the package.
+	CFLAGS="$(CFLAGS)" ./configure --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) --prefix=/usr
  --mandir=\$${prefix}/share/man
 
 # Build both architecture dependent and independent
@@ -764,91 +861,90 @@ build: build-arch build-indep
 build-arch: build-arch-stamp
 
 build-arch-stamp:  config.status
-        dh_testdir
+	dh_testdir
 
-        # Compile the package.
-        $(MAKE)
+	# Compile the package.
+	$(MAKE)
 
-        touch build-stamp
+	touch build-stamp
 
 # Build architecture independent
 build-indep: build-indep-stamp
 
 build-indep-stamp:  config.status
-        # Nothing to do, the only indep item is the manual which is available as html in original source
-        touch build-indep-stamp
+	# Nothing to do, the only indep item is the manual which is available as html in original source
+	touch build-indep-stamp
 
 # Clean up
 clean:
-        dh_testdir
-        dh_testroot
-        rm -f build-arch-stamp build-indep-stamp #CONFIGURE-STAMP#
-        # Clean temporary document directory
-        rm -rf debian/doc-temp
-        # Clean up.
-        -$(MAKE) distclean
-        rm -f config.log
+	dh_testdir
+	dh_testroot
+	rm -f build-arch-stamp build-indep-stamp #CONFIGURE-STAMP#
+	# Clean temporary document directory
+	rm -rf debian/doc-temp
+	# Clean up.
+	-$(MAKE) distclean
+	rm -f config.log
 ifneq "$(wildcard /usr/share/misc/config.sub)" ""
-        cp -f /usr/share/misc/config.sub config.sub
+	cp -f /usr/share/misc/config.sub config.sub
 endif
 ifneq "$(wildcard /usr/share/misc/config.guess)" ""
-        cp -f /usr/share/misc/config.guess config.guess
+	cp -f /usr/share/misc/config.guess config.guess
 endif
 
-        dh_clean
+	dh_clean
 
 # Install architecture dependent and independent
 install: install-arch install-indep
 
 # Install architecture dependent
 install-arch: build-arch
-        dh_testdir
-        dh_testroot
-        dh_clean -k -s
-        dh_installdirs -s
+	dh_testdir
+	dh_testroot
+	dh_clean -k -s
+	dh_installdirs -s
 
-        # Install the package files into build directory:
-        # - start with upstream make install
-        $(MAKE) install prefix=$(CURDIR)/debian/$(PACKAGE_NAME)/usr mandir=$(CURDIR)/debian/$(PACKAGE_NAME)/us
-r/share/man
-        # - copy html manual to temporary location for renaming
-        mkdir -p debian/doc-temp
-        dh_install -s
+	# Install the package files into build directory:
+	# - start with upstream make install
+	$(MAKE) install prefix=$(CURDIR)/debian/$(PACKAGE_NAME)/usr mandir=$(CURDIR)/debian/$(PACKAGE_NAME)/usr/share/man
+	# - copy html manual to temporary location for renaming
+	mkdir -p debian/doc-temp
+	dh_install -s
 
 # Install architecture independent
 install-indep: build-indep
-        dh_testdir
-        dh_testroot
-        dh_clean -k -i
-        dh_installdirs -i
-        dh_install -i
+	dh_testdir
+	dh_testroot
+	dh_clean -k -i
+	dh_installdirs -i
+	dh_install -i
 
 # Must not depend on anything. This is to be called by
 # binary-arch/binary-indep
 # in another 'make' thread.
 binary-common:
-        dh_testdir
-        dh_testroot
-        dh_installchangelogs ChangeLog
-        dh_installdocs
-        dh_installman
-        dh_link
-        dh_strip
-        dh_compress
-        dh_fixperms
-        dh_installdeb
-        dh_shlibdeps
-        dh_gencontrol
-        dh_md5sums
-        dh_builddeb
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs ChangeLog
+	dh_installdocs
+	dh_installman
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
 
 # Build architecture independant packages using the common target.
 binary-indep: build-indep install-indep
-        $(MAKE) -f debian/rules DH_OPTIONS=-i binary-common
+	$(MAKE) -f debian/rules DH_OPTIONS=-i binary-common
 
 # Build architecture dependant packages using the common target.
 binary-arch: build-arch install-arch
-        $(MAKE) -f debian/rules DH_OPTIONS=-a binary-common
+	$(MAKE) -f debian/rules DH_OPTIONS=-a binary-common
 
 # Build architecture depdendent and independent packages
 binary: binary-arch binary-indep
@@ -865,7 +961,7 @@ EOF
 # Used if virtual name != real name (perl, ...)
 #%define srcname	PBPKG
 
-Summary:        bla-bla
+Summary:        PBSUMMARY
 Summary(fr):    french bla-bla
 
 Name:           PBREALPKG
@@ -913,6 +1009,43 @@ PBLOG
 EOF
 				close(CONF);
 				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pbfilter") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pbfilter";
+				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pkg") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg";
+				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/pkg/pkginfo") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg/pkginfo";
+				print CONF << 'EOF';
+#
+# $Id$
+#
+PKG="PBREALPKG"
+NAME="PBSUMMARY"
+VERSION="PBVER"
+# or i386
+ARCH="all"
+CATEGORY="application"
+DESC="PBDESC"
+EMAIL="PBPACKAGER"
+VENDOR="PBPACKAGER"
+HOTLINE="PBURL"
+EOF
+				close(CONF);
+				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/pkg/pbbuild") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg/pbbuild";
+				print CONF << 'EOF';
+#
+# $Id$
+#
+#perl Makefile.PL INSTALLDIRS=vendor
+./configure --prefix=/usr
+make
+make install DESTDIR=\$1
+EOF
+				close(CONF);
+				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/pkg/depend") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg/depend";
+				print CONF << 'EOF';
+#
+# $Id$
+#
+#P SUNWperl584core       Perl 5.8.4 (core)
+EOF
+				close(CONF);
 	
 			}
 			pb_cms_add($pbconf{$ENV{'PBPROJ'}},$ENV{'PBCONFDIR'});

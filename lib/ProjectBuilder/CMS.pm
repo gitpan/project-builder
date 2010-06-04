@@ -387,7 +387,7 @@ if ($scheme =~ /^svn/) {
 	$oldurl = pb_cms_mod_http($oldurl,"svn");
 	$newurl = pb_cms_mod_http($newurl,"svn");
 	pb_system("$vcscmd copy -m \"Creation of $newurl from $oldurl\" $oldurl $newurl","Copying $oldurl to $newurl ");
-} elsif ($scheme eq "flat") {
+} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
 	die "cms $scheme unknown for project management";
 }
@@ -461,7 +461,7 @@ my $vcscmd = pb_cms_cmd($scheme);
 
 if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
 	pb_system("$vcscmd up $dir","Updating $dir ");
-} elsif ($scheme eq "flat") {
+} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
 	die "cms $scheme unknown";
 }
@@ -488,7 +488,7 @@ $msg = "Project $ENV{PBPROJ} creation" if (defined $pbinit);
 
 if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
 	pb_system("cd $dir ; $vcscmd ci -m \"$msg\" .","Checking in $dir ");
-} elsif ($scheme eq "flat") {
+} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
 	die "cms $scheme unknown";
 }
@@ -510,7 +510,7 @@ my $vcscmd = pb_cms_cmd($scheme);
 
 if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
 	pb_system("$vcscmd add $f","Adding $f to VCS ");
-} elsif ($scheme eq "flat") {
+} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
 	die "cms $scheme unknown";
 }
@@ -539,7 +539,8 @@ if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme
 		$l++;
 	}
 	return($l);
-} elsif ($scheme eq "flat") {
+} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
+	return(0);
 } else {
 	die "cms $scheme unknown";
 }
@@ -598,6 +599,8 @@ if (defined $type) {
 			$pbpkgreal = "lib".lc($pbpkg)."-perl";
 		} elsif ($dtype eq "ebuild") {
 			$pbpkgreal = $pbpkg;
+		} elsif ($dtype eq "pkg") {
+			$pbpkgreal = "PB$pbpkg";
 		} else {
 			die "pb_cms_get_real_pkg not implemented for $dtype yet";
 		}
@@ -775,8 +778,8 @@ if ((defined $testver) && (defined $testver->{$ENV{'PBPROJ'}}) && ($testver->{$E
 	}
 }
 
-if ($scheme =~ /^svn/) {
-	if (! -f "$dest/ChangeLog") {
+if (! -f "$dest/ChangeLog") {
+	if ($scheme =~ /^svn/) {
 		# In case we have no network, just create an empty one before to allow correct build
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
@@ -786,33 +789,23 @@ if ($scheme =~ /^svn/) {
 			# To be written from pbcl
 			pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from SVN");
 		}
-	}
-} elsif ($scheme =~ /^svk/) {
-	if (! -f "$dest/ChangeLog") {
+	} elsif ($scheme =~ /^svk/) {
 		pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from SVK");
-		}
-} elsif ($scheme =~ /^hg/) {
-	if (! -f "$dest/ChangeLog") {
+	} elsif ($scheme =~ /^hg/) {
 		# In case we have no network, just create an empty one before to allow correct build
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
-		pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from SVN");
-		}
-} elsif ($scheme =~ /^git/) {
-	if (! -f "$dest/ChangeLog") {
+		pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from Mercurial");
+	} elsif ($scheme =~ /^git/) {
 		# In case we have no network, just create an empty one before to allow correct build
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
 		pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from GIT");
-		}
-} elsif (($scheme eq "file") || ($scheme eq "dir") || ($scheme eq "http") || ($scheme eq "ftp")) {
-	if (! -f "$dest/ChangeLog") {
+	} elsif (($scheme eq "file") || ($scheme eq "dir") || ($scheme eq "http") || ($scheme eq "ftp")) {
 		pb_system("echo ChangeLog for $pkgdir > $dest/ChangeLog","Empty ChangeLog file created");
-	}
-} elsif ($scheme =~ /^cvs/) {
-	my $tmp=basename($pkgdir);
-	# CVS needs a relative path !
-	if (! -f "$dest/ChangeLog") {
+	} elsif ($scheme =~ /^cvs/) {
+		my $tmp=basename($pkgdir);
+		# CVS needs a relative path !
 		# In case we have no network, just create an empty one before to allow correct build
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
@@ -822,9 +815,12 @@ if ($scheme =~ /^svn/) {
 			# To be written from pbcl
 			pb_system("$vcscmd log $tmp > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from CVS");
 		}
+	} else {
+		die "cms $scheme unknown";
 	}
-} else {
-	die "cms $scheme unknown";
+}
+if (! -f "$dest/ChangeLog") {
+	copy("$dest/$ENV{'PBCMSLOGFILE'}","$dest/ChangeLog");
 }
 }
 
@@ -854,8 +850,8 @@ my $cmd = "";
 # If there is a socks proxy to use
 if ($scheme =~ /socks/) {
 	# Get the socks proxy command from the conf file
-	my ($pbsockcmd) = pb_conf_get("pbsockscmd");
-	$cmd = "$pbsockcmd->{$ENV{'PBPROJ'}} ";
+	my ($pbsockscmd) = pb_conf_get("pbsockscmd");
+	$cmd = "$pbsockscmd->{$ENV{'PBPROJ'}} ";
 }
 
 if ($scheme =~ /hg/) {

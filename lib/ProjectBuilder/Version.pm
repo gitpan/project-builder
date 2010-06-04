@@ -19,8 +19,8 @@ our @EXPORT = qw(pb_version_init);
 
 sub pb_version_init {
 
-my $projectbuilderver = "0.9.7.1";
-my $projectbuilderrev = "807";
+my $projectbuilderver = "0.9.9";
+my $projectbuilderrev = "1020";
 
 return($projectbuilderver,$projectbuilderrev);
 }

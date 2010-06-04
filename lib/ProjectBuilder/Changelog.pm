@@ -47,16 +47,10 @@ This modules provides generic functions suitable for changelog management for pr
 
 Function that generates the changelog used in build files, or for announcements (web, mailing-list, ...)
 
-It takes up to 9 parameters:
-The first parameter is the type of the distribution.
-The second parameter is the package name generated.
-The third parameter is the version of the package.
-The fourth parameter is the tag of the package.
-The fifth parameter is the suffix of the package.
-The sixth parameter is now unused.
-The seventh parameter is the file descriptor on which to write the changelog content.
-The eighth parameter is a flag in the configuration file indicating whether we want changelog expansion or not.
-The nineth parameter is the potential changelog file pbcl.
+It takes 3 parameters:
+The first parameter is the %pb hash containing packge info
+The second parameter is the file descriptor on which to write the changelog content.
+The third parameter is a flag in the configuration file indicating whether we want changelog expansion or not.
 
 =cut
 
@@ -118,12 +112,12 @@ if (((not defined $chglog) || (! -f $chglog)) && ($doit ne "yes")) {
 		}
 	if ($dtype eq "deb") {
 		if ($pbver !~ /^[0-9]/) {
-			# dpkg-deb doesn't accept non digit versions. Prepending date
-			my $ldate = strftime("%Y%m%d", @date);
-			$pbver =~ s/^/$ldate/;
+			# dpkg-deb doesn't accept non digit versions. 
+			# Prepending 0 in order to make updates easy hopefully
+			$pbver =~ s/^/0/;
 		}
-		print $OUTPUT "$pbrealpkg ($pbver) unstable; urgency=low\n";
-		print $OUTPUT "\n";
+		print $OUTPUT "$pbrealpkg ($pbver-$pbtag) unstable; urgency=low\n";
+		print $OUTPUT "  * Updated to $pbver\n";
 		print $OUTPUT " -- $pbpackager->{$ENV{'PBPROJ'}}  $n2date\n\n\n";
 		}
 	return;
@@ -153,32 +147,35 @@ while (<INPUT>) {
 	$ver =~ s/^v//;
 	chomp($date);
 	$date =~ s/\(([0-9-]+)\)/$1/;
-	#pb_log(2,"**$date**\n";
+	pb_log(3,"**Date:$date**\n");
 	$ndate = UnixDate($date,"%a", "%b", "%d", "%Y");
 	$n2date = UnixDate($date,"%a, %d %b %Y %H:%M:%S %z");
-	#pb_log(2,"**$ndate**\n";
+	pb_log(3,"**nDate:$ndate**\n");
+
+	pb_log(3,"**Ver:$ver**\n");
+	if ($ver !~ /-/) {
+		if ($first eq 1) {
+			$ver2 = "$ver-$pbtag";
+			$first = 0;
+		} else {
+			$ver2 = "$ver-1";
+		}
+	} else {
+		$ver2 = $ver;
+	}
+	pb_log(3,"**Ver2:$ver2**\n");
 
 	if (($dtype eq "rpm") || ($dtype eq "fc")) {
-		if ($ver !~ /-/) {
-			if ($first eq 1) {
-				$ver2 = "$ver-$pbtag";
-				$first=0;
-			} else {
-				$ver2 = "$ver-1";
-			}
-		} else {
-			$ver2 = "$ver";
-		}
 		print $OUTPUT "* $ndate $pbpackager->{$ENV{'PBPROJ'}} $ver2\n";
 		print $OUTPUT "- Updated to $ver\n";
 		}
 	if ($dtype eq "deb") {
-		if ($ver !~ /^[0-9]/) {
-			# dpkg-deb doesn't accept non digit versions. Prepending date
-			my $ldate = strftime("%Y%m%d", @date);
-			$ver =~ s/^/$ldate/;
+		if ($ver2 !~ /^[0-9]/) {
+			# dpkg-deb doesn't accept non digit versions. 
+			# Prepending 0 in order to make updates easy hopefully
+			$ver2 =~ s/^/0/;
 		}
-		print $OUTPUT "$pbrealpkg ($ver) unstable; urgency=low\n";
+		print $OUTPUT "$pbrealpkg ($ver2) unstable; urgency=low\n";
 		print $OUTPUT "\n";
 		}
 
