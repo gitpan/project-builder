@@ -1745,7 +1745,10 @@ sub pb_launchv {
 		my $vetype = $ptr->{$ENV{'PBPROJ'}};
 
 		# We can probably only get those params now we have the distro context
-		my ($rbsb4pi,$rbspi,$vesnap,$oscodename,$osmindep,$verebuild) = pb_conf_get_if("rbsb4pi","rbspi","vesnap","oscodename","osmindep","verebuild");
+		my ($rbsb4pi,$rbspi,$vesnap,$oscodename,$osmindep,$verebuild,$rbsmirrorsrv) = pb_conf_get_if("rbsb4pi","rbspi","vesnap","oscodename","osmindep","verebuild","rbsmirrorsrv");
+
+		# We need to avoid umask propagation to the VE
+		umask 0022;
 
 		if (($vetype eq "chroot") || ($vetype eq "schroot")) {
 			# Architecture consistency
@@ -1755,10 +1758,26 @@ sub pb_launchv {
 
 			my ($verpmtype,$vedebtype) = pb_conf_get("verpmtype","vedebtype");
 			if (($create != 0) || ((defined $verebuild) && ($verebuild->{$ENV{'PBPROJ'}} =~ /true/i)) || ($pbforce == 1)) {
+				my ($rbsopt1) = pb_conf_get_if("rbsopt");
+
 				# We have to rebuild the chroot
 				if ($dtype eq "rpm") {
 
+					# Which tool is used
 					my $verpmstyle = $verpmtype->{$ENV{'PBPROJ'}};
+
+					# Get potential rbs option
+					my $rbsopt = "";
+					if (defined $rbsopt1) {
+						if (defined $rbsopt1->{$verpmstyle}) {
+							$rbsopt = $rbsopt1->{$verpmstyle};
+						} elsif (defined $rbsopt1->{$ENV{'PBPROJ'}}) {
+							$rbsopt = $rbsopt1->{$ENV{'PBPROJ'}};
+						} else {
+							$rbsopt = "";
+						}
+					}
+
 					my $postinstall = pb_get_postinstall($ddir,$dver,$darch,$rbspi,$verpmstyle);
 					if ($verpmstyle eq "rinse") {
 						# Need to reshape the mirrors generated with local before-post-install script
@@ -1790,10 +1809,12 @@ sub pb_launchv {
 						$rinseverb = "--verbose" if ($pbdebug gt 0);
 						my ($rbsconf) = pb_conf_get("rbsconf");
 
-						pb_system("sudo /usr/sbin/rinse --directory \"$vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch\" --arch \"$darch\" --distribution \"$ddir-$dver\" --config \"$rbsconf->{$ENV{'PBPROJ'}}\" $b4post $postinstall $addpkgs $rinseverb","Creating the rinse VE for $ddir-$dver ($darch)", "verbose");
+						pb_system("sudo /usr/sbin/rinse --directory \"$vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch\" --arch \"$darch\" --distribution \"$ddir-$dver\" --config \"$rbsconf->{$ENV{'PBPROJ'}}\" $b4post $postinstall $rbsopt $addpkgs $rinseverb","Creating the rinse VE for $ddir-$dver ($darch)", "verbose");
 					} elsif ($verpmstyle eq "rpmbootstrap") {
 						my $rbsverb = "";
-						$rbsverb = "--verbose" if ($pbdebug gt 0);
+						foreach my $i (1..$pbdebug) {
+							$rbsverb .= " -v";
+						}
 						my $addpkgs = "";
 						my $postparam = "";
 						$postparam .= pb_distro_get_param($ddir,$dver,$darch,$osmindep);
@@ -1802,10 +1823,10 @@ sub pb_launchv {
 						} else {
 							$addpkgs = "-a $postparam";
 						}
-						pb_system("sudo /usr/bin/rpmbootstrap $postinstall $addpkgs $ddir-$dver-$darch $rbsverb","Creating the rpmbootstrap VE for $ddir-$dver ($darch)", "verbose");
+						pb_system("sudo /usr/bin/rpmbootstrap $rbsopt $postinstall $addpkgs $ddir-$dver-$darch $rbsverb","Creating the rpmbootstrap VE for $ddir-$dver ($darch)", "verbose");
 					} elsif ($verpmstyle eq "mock") {
 						my ($rbsconf) = pb_conf_get("rbsconf");
-						pb_system("sudo /usr/sbin/mock --init --resultdir=\"/tmp\" --configdir=\"$rbsconf->{$ENV{'PBPROJ'}}\" -r $v","Creating the mock VE for $ddir-$dver ($darch)");
+						pb_system("sudo /usr/sbin/mock --init --resultdir=\"/tmp\" --configdir=\"$rbsconf->{$ENV{'PBPROJ'}}\" -r $v $rbsopt","Creating the mock VE for $ddir-$dver ($darch)");
 						# Once setup we need to install some packages, the pb account, ...
 						pb_system("sudo /usr/sbin/mock --install --configdir=\"$rbsconf->{$ENV{'PBPROJ'}}\" -r $v su","Configuring the mock VE");
 					} else {
@@ -1813,6 +1834,7 @@ sub pb_launchv {
 					}
 				} elsif ($dtype eq "deb") {
 					my $vedebstyle = $vedebtype->{$ENV{'PBPROJ'}};
+
 					my $codename = pb_distro_get_param($ddir,$dver,$darch,$oscodename);
 					my $postparam = "";
 					my $addpkgs;
@@ -1822,7 +1844,21 @@ sub pb_launchv {
 					} else {
 						$addpkgs = "--include $postparam";
 					}
+					my $debmir = "";
+					$debmir .= pb_distro_get_param($ddir,$dver,$darch,$rbsmirrorsrv);
 
+					# Get potential rbs option
+					my $rbsopt = "";
+					if (defined $rbsopt1) {
+						if (defined $rbsopt1->{$vedebstyle}) {
+							$rbsopt = $rbsopt1->{$vedebstyle};
+						} elsif (defined $rbsopt1->{$ENV{'PBPROJ'}}) {
+							$rbsopt = $rbsopt1->{$ENV{'PBPROJ'}};
+						} else {
+							$rbsopt = "";
+						}
+					}
+	
 					# debootstrap works with amd64 not x86_64
 					my $debarch = $darch;
 					$debarch = "amd64" if ($darch eq "x86_64");
@@ -1830,7 +1866,10 @@ sub pb_launchv {
 						my $dbsverb = "";
 						$dbsverb = "--verbose" if ($pbdebug gt 0);
 
-					 	pb_system("sudo /usr/sbin/debootstrap $dbsverb --arch=$debarch $addpkgs $codename \"$vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch\"","Creating the debootstrap VE for $ddir-$dver ($darch)", "verbose");
+						# Some perl modules are in Universe on Ubuntu
+						$rbsopt .= " --components=main,universe" if ($ddir eq "ubuntu");
+
+					 	pb_system("sudo /usr/sbin/debootstrap $dbsverb $rbsopt --arch=$debarch $addpkgs $codename \"$vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch\" $debmir","Creating the debootstrap VE for $ddir-$dver ($darch)", "verbose");
 						# debootstrap doesn't create an /etc/hosts file
 						if (! -f "$vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch/etc/hosts" ) {
 							pb_system("sudo cp /etc/hosts $vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch/etc/hosts");
@@ -1844,6 +1883,9 @@ sub pb_launchv {
 					die "Unknown distribution type $dtype. Report to dev team";
 				}
 			}
+			# Fix modes to allow access to the VE for pb user
+			pb_system("sudo chmod 755 $vepath->{$ENV{'PBPROJ'}}/$ddir $vepath->{$ENV{'PBPROJ'}}/$ddir/$dver $vepath->{$ENV{'PBPROJ'}}/$ddir/$dver/$darch","Fixing permissions");
+
 			# Test if an existing snapshot exists and use it if appropriate
 			# And also use it of no local extracted VE is present
 			if ((-f "$vepath->{$ENV{'PBPROJ'}}/$ddir-$dver-$darch.tar.gz") &&
@@ -2230,37 +2272,18 @@ EOF
 		pb_system("cat $keyfile.pub | ssh -q -o UserKnownHostsFile=/dev/null -p $nport -i $keyfile root\@$vmhost->{$ENV{'PBPROJ'}} \"mkdir -p .ssh ; chmod 700 .ssh ; cat >> .ssh/authorized_keys ; chmod 600 .ssh/authorized_keys ; if [ -x /usr/bin/chcon ]; then /usr/bin/chcon -Rt home_ssh_t .ssh 2> /dev/null; fi\"","Copying local keys to $vtype. This may require the root password");
 		# once this is done, we can do what we want on the VM remotely
 	} elsif ($vtype eq "ve") {
-		# We need to finish the setup of packages needed in the VE
-		# rinse/debootstrap at least needs it
-		my ($vemindep) = pb_conf_get_if("vemindep");
-
-		my $postparam = "";
-		if (defined $vemindep) {
-			$postparam .= " ".pb_distro_get_param($ddir,$dver,$darch,$vemindep);
-		}
-		# Change the list of pkg in to a space separated list
-		$postparam =~ s/,/ /g;
-		# remove potential sudo from the update command for this time,
-		# as this will be run as root anyway, and if not we will have
-		# a problem with tty
-		$pbupd =~ s/sudo //g;
-
-			print SCRIPT << "EOF";
+		print SCRIPT << "EOF";
 # For VE we need a good null dev
 pb_system("rm -f /dev/null; mknod /dev/null c 1 3; chmod 777 /dev/null");
 EOF
-		if ($postparam ne "") {
-			print SCRIPT << "EOF";
+		print SCRIPT << "EOF";
 # For VE we first need to mount some FS
 pb_system("mount -t proc /proc /proc");
 
-# For VE we need some additional packages that are not there yet
-pb_system("$pbupd $postparam");
-
 EOF
-		}
 	}
-	if ($vtype eq "vm") {
+
+if ($vtype eq "vm") {
 		print SCRIPT << 'EOF';
 # Removes duplicate in .ssh/authorized_keys of our key if needed
 #
@@ -2416,8 +2439,11 @@ EOF
 close(PBFILE);
 EOF
 	print SCRIPT << "EOF";
+# Some distro force requiretty at compile time, so disable here
+print PBOUT "Defaults:$pbac->{$ENV{'PBPROJ'}} !requiretty\n";
+print PBOUT "Defaults:root !requiretty\n";
 # This is needed in order to be able to halt the machine from the $pbac->{$ENV{'PBPROJ'}} account at least
-print PBOUT "Defaults:pb env_keep += \\\"http_proxy ftp_proxy\\\"\n";
+print PBOUT "Defaults:$pbac->{$ENV{'PBPROJ'}} env_keep += \\\"http_proxy ftp_proxy\\\"\n";
 print PBOUT "$pbac->{$ENV{'PBPROJ'}}   ALL=(ALL) NOPASSWD:ALL\n";
 EOF
 	print SCRIPT << 'EOF';

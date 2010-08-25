@@ -2,7 +2,19 @@
 
 PB CHANGES
 
-0.9.9 (2010-04-29)
+0.9.10 (2010-06-07)
+- Update pres for HP tech Forum (Bruno Cornec)
+- Add support for mirror server to debootstrap command (Bruno Cornec)
+- Add support for Ubuntu 10.04 natively and with debootstrap (universe repo needed) (Bruno Cornec)
+- Fix umask propagation in VE, fixing issues in directory creation with wrong rights (Bruno Cornec)
+- Successful tests with some VE (Mandriva 2009.1 and 2010.0, CentOS4, Fedora 12, CentOS5, Ubuntu 10.04, Debian 5) (Bruno Cornec)
+- Project-Builder.org is licensed under the GPL v2 for the moment. (Bruno Cornec)
+- Options cleanup (veconf => rbsconf, ve4pi => rbs4pi, vetmout/vemindep removed, verebuild not mandatory, rbsopt added for passing options to rpm|debbootstrap, ventp/vmntp is now optional) (Bruno Cornec)
+- New pb_get_postinstall generic function for rinse and rpmbootstrap (Bruno Cornec)
+- Pass more precisely the level of verbosity to rpmbootstrap (Bruno Cornec)
+- Fix bug in sudoers creation: now using the real account name, and also forcing to NOT requiretty (Bruno Cornec)
+
+0.9.9 (2010-05-01)
 - Adds debootstrap and rpmbootstrap support for VE (Bruno Cornec)
 - Improved pb presentation with Solaris integration for HP TES 2009, Fosdem 2010 and Solutions Linux 2010 (Bruno Cornec)
 - Adds the Project Builder Lab delivered for the TES 2009 inside HP (Bruno Cornec)
