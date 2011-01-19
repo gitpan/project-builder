@@ -18,11 +18,13 @@ use File::Basename;
 use File::Copy;
 use POSIX qw(strftime);
 use lib qw (lib);
+use ProjectBuilder::Version;
 use ProjectBuilder::Base;
 use ProjectBuilder::Conf;
 
 # Inherit from the "Exporter" module which handles exporting functions.
  
+use vars qw($VERSION $REVISION @ISA @EXPORT);
 use Exporter;
  
 # Export, by default, all the functions into the namespace of
@@ -30,6 +32,7 @@ use Exporter;
  
 our @ISA = qw(Exporter);
 our @EXPORT = qw(pb_cms_init pb_cms_export pb_cms_get_uri pb_cms_copy pb_cms_checkout pb_cms_up pb_cms_checkin pb_cms_isdiff pb_cms_get_pkg pb_cms_get_real_pkg pb_cms_compliant pb_cms_log pb_cms_add);
+($VERSION,$REVISION) = pb_version_init();
 
 =pod
 
@@ -56,6 +59,7 @@ It sets up environement variables (PBPROJDIR, PBDIR, PBREVISION, PBCMSLOGFILE)
 sub pb_cms_init {
 
 my $pbinit = shift || undef;
+my $param = shift || undef;
 
 my ($pburl) = pb_conf_get("pburl");
 pb_log(2,"DEBUG: Project URL of $ENV{'PBPROJ'}: $pburl->{$ENV{'PBPROJ'}}\n");
@@ -69,6 +73,9 @@ if ((defined $pbprojdir) && (defined $pbprojdir->{$ENV{'PBPROJ'}})) {
 } else {
 	$ENV{'PBPROJDIR'} = "$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}";
 }
+# Expand potential env variable in it to allow string replacement
+eval { $ENV{'PBPROJDIR'} =~ s/(\$ENV.+\})/$1/eeg };
+
 
 # Computing the default dir for PBDIR.
 # what we have is PBPROJDIR so work from that.
@@ -100,13 +107,18 @@ if ($scheme =~ /^hg/) {
 	$ENV{'PBREVISION'}="flat";
 	$ENV{'PBCMSLOGFILE'}="flat.log";
 } elsif ($scheme =~ /^svn/) {
-	# svnversion more precise than svn info
-	$tmp = `(cd "$ENV{'PBDIR'}" ; $vcscmd"version" .)`;
+	# svnversion more precise than svn info if sbx
+	if ((defined $param) && ($param eq "CMS")) {
+		$tmp = `(LANGUAGE=C $vcscmd info $pburl->{$ENV{'PBPROJ'}} | grep -E '^Revision:' | cut -d: -f2)`;
+		$tmp =~ s/\s+//;
+	} else {
+		$tmp = `(cd "$ENV{'PBDIR'}" ; $vcscmd"version" .)`;
+	}
 	chomp($tmp);
 	$ENV{'PBREVISION'}=$tmp;
 	$ENV{'PBCMSLOGFILE'}="svn.log";
 } elsif ($scheme =~ /^svk/) {
-	$tmp = `(cd "$ENV{'PBDIR'}" ; $vcscmd info . | grep -E '^Revision:' | cut -d: -f2)`;
+	$tmp = `(cd "$ENV{'PBDIR'}" ; LANGUAGE=C $vcscmd info . | grep -E '^Revision:' | cut -d: -f2)`;
 	$tmp =~ s/\s+//;
 	chomp($tmp);
 	$ENV{'PBREVISION'}=$tmp;
@@ -122,6 +134,7 @@ if ($scheme =~ /^hg/) {
 	die "cms $scheme unknown";
 }
 
+pb_log(1,"pb_cms_init returns $scheme,$pburl->{$ENV{'PBPROJ'}}\n");
 return($scheme,$pburl->{$ENV{'PBPROJ'}});
 }
 
@@ -177,11 +190,12 @@ if ($scheme =~ /^svn/) {
 		pb_log(4,"$uri,$source,$destdir,$scheme, $account, $host, $port, $path,$tmp");
 		if (-d $source) {
 			pb_system("mkdir -p $tmp ; cd $tmp; tar -cf - -C $source . | tar xf -","Exporting $source from $scheme to $tmp ");
-		# If source is file do not use -C with source
 		} else {
+			# If source is file do not use -C with source
 			pb_system("mkdir -p ".dirname($tmp)." ; cd ".dirname($tmp)."; tar -cf - -C $src ".basename($source)." | tar xf -","Exporting $src/".basename($source)." from $scheme to $tmp ");
 		}
 	} else {
+		# Look at svk admin hotcopy
 		die "Unable to export from svk without a source defined";
 	}
 } elsif ($scheme eq "dir") {
@@ -194,7 +208,16 @@ if ($scheme =~ /^svn/) {
 	pb_cms_export("file://$ENV{'PBTMP'}/$f",$source,$destdir);
 	return("$ENV{'PBTMP'}/$f");
 } elsif ($scheme eq "file") {
-	use File::MimeInfo; 
+	eval
+	{
+		require File::MimeInfo;
+		File::MimeInfo->import();
+	};
+	if ($@) {
+		# File::MimeInfo not found
+		die("ERROR: Install File::MimeInfo to handle scheme $scheme\n");
+	}
+
 	my $mm = mimetype($path);
 	pb_log(2,"mimetype: $mm\n");
 
@@ -266,6 +289,7 @@ if ($scheme =~ /^svn/) {
 		$tmp1 = basename($source);
 	} else {
 		# Probably not right, should be checked, but that way I'll notice it :-)
+		pb_log(0,"You're in an untested part of project-builder.org, please report any result upstream\n");
 		$tmp1 = $uri;
 	}
 	# If we're working on the CVS itself
@@ -360,7 +384,7 @@ if ($scheme =~ /^svn/) {
 } else {
 	die "cms $scheme unknown";
 }
-pb_log(2,"Found CMS info: $res\n");
+pb_log(1,"pb_cms_get_uri returns $res\n");
 return($res);
 }
 
@@ -529,21 +553,23 @@ sub pb_cms_isdiff {
 my $scheme = shift;
 my $dir =shift;
 my $vcscmd = pb_cms_cmd($scheme);
+my $l = undef;
 
 if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
 	open(PIPE,"$vcscmd diff $dir |") || die "Unable to get $vcscmd diff from $dir";
-	my $l = 0;
+	$l = 0;
 	while (<PIPE>) {
 		# Skipping normal messages in case of CVS
 		next if (/^cvs diff:/);
 		$l++;
 	}
-	return($l);
 } elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
-	return(0);
+	$l = 0;
 } else {
 	die "cms $scheme unknown";
 }
+pb_log(1,"pb_cms_isdiff returns $l\n");
+return($l);
 }
 
 =item B<pb_cms_get_pkg>
@@ -609,7 +635,7 @@ if (defined $type) {
 	}
 }
 
-pb_log(2,"Real Package: $pbpkgreal\n");
+pb_log(1,"pb_cms_get_real_pkg returns $pbpkgreal\n");
 return($pbpkgreal);
 }
 
@@ -657,7 +683,10 @@ pb_log(2,"$envar: $ENV{$envar}\n");
 
 my ($scheme, $account, $host, $port, $path) = pb_get_uri($uri);
 
-if ((! -d "$ENV{$envar}") || (defined $pbinit)) {
+if (($scheme !~ /^cvs/) || ($scheme !~ /^svn/) || ($scheme =~ /^svk/) || ($scheme !~ /^hg/) || ($scheme !~ /^git/) ) {
+	# Do not compare if it's not a real cms
+	return;
+} elsif ((! -d "$ENV{$envar}") || (defined $pbinit)) {
 	if (defined $pbinit) {
 		pb_mkdir_p("$ENV{$envar}");
 	} else {
@@ -669,9 +698,6 @@ if ((! -d "$ENV{$envar}") || (defined $pbinit)) {
 		pb_log(1,"Checking out $uri\n");
 		pb_cms_checkout($scheme,$uri,$ENV{$envar});
 	}
-} elsif (($scheme !~ /^cvs/) || ($scheme !~ /^svn/) || ($scheme =~ /^svk/) || ($scheme !~ /^hg/) || ($scheme !~ /^git/) ) {
-	# Do not compare if it's not a real cms
-	return;
 } else {
 	pb_log(1,"$uri found locally, checking content\n");
 	my $cmsurl = pb_cms_get_uri($scheme,$ENV{$envar});
@@ -783,8 +809,9 @@ if (! -f "$dest/ChangeLog") {
 		# In case we have no network, just create an empty one before to allow correct build
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
-		if (-x "/usr/bin/svn2cl") {
-			pb_system("/usr/bin/svn2cl --group-by-day --authors=$authors -i -o $dest/ChangeLog $pkgdir","Generating ChangeLog from SVN with svn2cl");
+		my $command = pb_check_req("svn2cl",1);
+		if (-x $command) {
+			pb_system("$command --group-by-day --authors=$authors -i -o $dest/ChangeLog $pkgdir","Generating ChangeLog from SVN with svn2cl");
 		} else {
 			# To be written from pbcl
 			pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from SVN");
@@ -809,8 +836,9 @@ if (! -f "$dest/ChangeLog") {
 		# In case we have no network, just create an empty one before to allow correct build
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
-		if (-x "/usr/bin/cvs2cl") {
-			pb_system("/usr/bin/cvs2cl --group-by-day -U $authors -f $dest/ChangeLog $pkgdir","Generating ChangeLog from CVS with cvs2cl");
+		my $command = pb_check_req("cvs2cl",1);
+		if (-x $command) {
+			pb_system("$command --group-by-day -U $authors -f $dest/ChangeLog $pkgdir","Generating ChangeLog from CVS with cvs2cl");
 		} else {
 			# To be written from pbcl
 			pb_system("$vcscmd log $tmp > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from CVS");
@@ -830,6 +858,7 @@ my $url = shift;
 my $proto = shift;
 
 $url =~ s/^$proto\+(http[s]*):/$1:/;
+pb_log(1,"pb_cms_mod_http returns $url\n");
 return($url);
 }
 
@@ -838,6 +867,7 @@ sub pb_cms_mod_socks {
 my $url = shift;
 
 $url =~ s/^([A-z0-9]+)\+(socks):/$1:/;
+pb_log(1,"pb_cms_mod_socks returns $url\n");
 return($url);
 }
 
@@ -865,12 +895,16 @@ if ($scheme =~ /hg/) {
 } elsif ($scheme =~ /cvs/) {
 	return($cmd."cvs")
 } elsif (($scheme =~ /http/) || ($scheme =~ /ftp/)) {
-	if (-x "/usr/bin/wget") {
-		return($cmd."/usr/bin/wget -nv -O ");
-	} elsif (-x "/usr/bin/curl") {
-		return($cmd."/usr/bin/curl -o ");
+	my $command = pb_check_req("wget",1);
+	if (-x $command) {
+		return($cmd."$command -nv -O ");
 	} else {
-		die "Unable to handle $scheme.\nNo wget/curl available, please install one of those";
+		$command = pb_check_req("curl",1);
+		if (-x $command) {
+			return($cmd."$command -o ");
+		} else {
+			die "Unable to handle $scheme.\nNo wget/curl available, please install one of those";
+		}
 	}
 } else {
 	return($cmd);

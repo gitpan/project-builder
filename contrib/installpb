@@ -9,7 +9,7 @@ use ProjectBuilder::Distribution qw (pb_distro_init);
 # To adapt
 my $pbver= "devel";
 
-my ($ddir, $dver, $dfam, $dtype, $dsuf) = pb_distro_init(); 
+my ($ddir, $dver, $dfam, $dtype, $dos, $dsuf) = pb_distro_init(); 
 
 print "distro tuple: ".join(',',($ddir, $dver, $dfam, $dtype, $dsuf))."\n";
 

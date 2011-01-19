@@ -16,11 +16,13 @@ use English;
 use Date::Manip;
 use POSIX qw(strftime);
 use lib qw (lib);
+use ProjectBuilder::Version;
 use ProjectBuilder::Base;
 use ProjectBuilder::Conf;
 
 # Inherit from the "Exporter" module which handles exporting functions.
  
+use vars qw($VERSION $REVISION @ISA @EXPORT);
 use Exporter;
  
 # Export, by default, all the functions into the namespace of
@@ -28,6 +30,7 @@ use Exporter;
  
 our @ISA = qw(Exporter);
 our @EXPORT = qw(pb_changelog);
+($VERSION,$REVISION) = pb_version_init();
 
 =pod
 

@@ -18,12 +18,14 @@ use File::Basename;
 use File::stat;
 use POSIX qw(strftime);
 use lib qw (lib);
+use ProjectBuilder::Version;
 use ProjectBuilder::Base;
 use ProjectBuilder::Conf;
 use ProjectBuilder::CMS;
 
 # Inherit from the "Exporter" module which handles exporting functions.
  
+use vars qw($VERSION $REVISION @ISA @EXPORT);
 use Exporter;
  
 # Export, by default, all the functions into the namespace of
@@ -31,6 +33,7 @@ use Exporter;
  
 our @ISA = qw(Exporter);
 our @EXPORT = qw(pb_env_init pb_env_init_pbrc);
+($VERSION,$REVISION) = pb_version_init();
 
 =pod
 
@@ -171,7 +174,7 @@ pb_conf_add("$vepath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $vepath) && (-f "$ve
 #
 # Detect the root dir for hosting all the content generated with pb
 #
-=over 4 
+=pod
 
  Tree will look like this:
 
@@ -204,6 +207,8 @@ pb_conf_add("$vepath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $vepath) && (-f "$ve
 
  (*) By default, if no relocation in .pbrc, dev dir is taken in the maint pbdefdir (when appropriate)
  Names under a pbproj and the corresponding pbconf should be similar
+
+=back 
 
 =cut
 
@@ -281,7 +286,9 @@ pb_log(2,"PBBUILDDIR: $ENV{'PBBUILDDIR'}\n");
 # In VMs/VEs we want to skip that by providing good env vars.
 # return values in that case are useless
 #
-if (($action =~ /^cms2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || ($action =~ /^newproj$/) || ($action =~ /^announce/) || ($action =~ /^web/)) {
+return if ($action =~ /^clean$/);
+
+if (($action =~ /^cms2/) || ($action =~ /^sbx2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || ($action =~ /^newproj$/) || ($action =~ /^announce/)) {
 
 	#
 	# Check pbconf cms compliance
@@ -477,16 +484,18 @@ if (($action =~ /^cms2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || 
 # Hash of valid version names
 
 # Additional repository to add at build time
-# addrepo centos-5-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el5.rf.x86_64.rpm,ftp://ftp.project-builder.org/test/centos/5/pb.repo
-# addrepo centos-5-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el5.rf.x86_64.rpm,ftp://ftp.project-builder.org/test/centos/5/pb.repo
+# addrepo centos-5-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el5.rf.x86_64.rpm,ftp://ftp.project-builder.org/centos/5/pb.repo
+# addrepo centos-5-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el5.rf.x86_64.rpm,ftp://ftp.project-builder.org/centos/5/pb.repo
 #version $ENV{'PBPROJ'} = devel,stable
 
 # Is it a test version or a production version
 testver $ENV{'PBPROJ'} = true
+# Which upper target dir for delivery
+delivery $ENV{'PBPROJ'} = test
 
 # Additional repository to add at build time
-# addrepo centos-5-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el5.rf.x86_64.rpm,ftp://ftp.project-builder.org/test/centos/5/pb.repo
-# addrepo centos-4-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el4.rf.x86_64.rpm,ftp://ftp.project-builder.org/test/centos/4/pb.repo
+# addrepo centos-5-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el5.rf.x86_64.rpm,ftp://ftp.project-builder.org/centos/5/pb.repo
+# addrepo centos-4-x86_64 = http://packages.sw.be/rpmforge-release/rpmforge-release-0.3.6-1.el4.rf.x86_64.rpm,ftp://ftp.project-builder.org/centos/4/pb.repo
 
 # Adapt to your needs:
 # Optional if you need to overwrite the global values above
@@ -548,11 +557,14 @@ filter PBVER = \$pb->{'ver'}
 # PBDATE is replaced by the date (\$pb->{'date'} in code)
 filter PBDATE = \$pb->{'date'}
 
-# PBPATCHSRC is replaced by the patches names if value is yes
+# PBPATCHSRC is replaced by the patches names if value is yes. Patches are located under the pbpatch dir of the pkg.
 #filter PBPATCHSRC = yes
 
 # PBPATCHCMD is replaced by the patches commands if value is yes
 #filter PBPATCHCMD = yes
+
+# PBMULTISRC is replaced by the sources names if value is yes. Sources are located under the pbsrc dir of the pkg.
+#filter PBMULTISRC = yes
 
 # PBTAG is replaced by the tag (\$pb->{'tag'} in code)
 filter PBTAG = \$pb->{'tag'}
@@ -958,8 +970,8 @@ EOF
 #
 # $Id$
 #
-# Used if virtual name != real name (perl, ...)
-#%define srcname	PBPKG
+# Used if virtual name != real name (perl, ...) - replace hash by percent in the below line
+#define srcname	PBPKG
 
 Summary:        PBSUMMARY
 Summary(fr):    french bla-bla
@@ -1008,6 +1020,18 @@ PBLOG
 
 EOF
 				close(CONF);
+				open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/pkg.pbf") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/pkg.pbf";
+				print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for pkg build
+#
+# Solaris package name (VENDOR : 4 letters in uppercase, SOFT : 8 letters in lowercase)
+filter PBSOLPKG = SUNWsoftware
+
+EOF
+				close(CONF);
 				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pbfilter") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pbfilter";
 				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pkg") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg";
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/pkg/pkginfo") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg/pkginfo";
@@ -1015,13 +1039,13 @@ EOF
 #
 # $Id$
 #
-PKG="PBREALPKG"
-NAME="PBSUMMARY"
+PKG="PBSOLPKG"
+NAME="PBREALPKG"
 VERSION="PBVER"
-# or i386
+# all or i386
 ARCH="all"
 CATEGORY="application"
-DESC="PBDESC"
+DESC="PBSUMMARY"
 EMAIL="PBPACKAGER"
 VENDOR="PBPACKAGER"
 HOTLINE="PBURL"
@@ -1075,8 +1099,6 @@ EOF
 	return;
 }
 }
-
-=back 
 
 =head1 WEB SITES
 

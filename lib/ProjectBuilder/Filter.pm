@@ -17,11 +17,13 @@ use English;
 use File::Basename;
 use File::Copy;
 use lib qw (lib);
+use ProjectBuilder::Version;
 use ProjectBuilder::Base;
 use ProjectBuilder::Changelog;
 
 # Inherit from the "Exporter" module which handles exporting functions.
  
+use vars qw($VERSION $REVISION @ISA @EXPORT);
 use Exporter;
  
 # Export, by default, all the functions into the namespace of
@@ -29,6 +31,7 @@ use Exporter;
  
 our @ISA = qw(Exporter);
 our @EXPORT = qw(pb_get_filters pb_filter_file_pb pb_filter_file_inplace pb_filter_file);
+($VERSION,$REVISION) = pb_version_init();
 
 =pod
 
@@ -152,6 +155,7 @@ while (<FILE>) {
 		pb_log(3,"DEBUG filter{$s}: $filter{$s}\n");
 		# Expand variables if any single one found
 		if ($tmp =~ /\$/) {
+			pb_log(3,"*** Filtering variable in $tmp ***\n");
 			# Order is important as we need to handle hashes refs before simple vars
 			eval { $tmp =~ s/(\$\w+-\>\{\'\w+\'\})/$1/eeg };
 			eval { $tmp =~ s/(\$\w+)/$1/eeg };
@@ -172,6 +176,14 @@ while (<FILE>) {
 			my $i = 0;
 			foreach my $p (split(/,/,$pb->{'patches'}->{$pb->{'tuple'}})) {
 				print DEST "Patch$i:         ".basename($p).".gz\n";
+				$i++;
+			}
+			$tmp = "";
+		} elsif (($s =~ /^PBMULTISRC$/) && ($line =~ /^PBMULTISRC$/)) {
+			pb_log(3,"DEBUG filtering PBMULTISRC\n");
+			my $i = 1;
+			foreach my $p (split(/,/,$pb->{'sources'}->{$pb->{'tuple'}})) {
+				print DEST "Source$i:         ".basename($p)."\n";
 				$i++;
 			}
 			$tmp = "";
