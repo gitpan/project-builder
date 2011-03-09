@@ -60,17 +60,21 @@ The third parameter is a flag in the configuration file indicating whether we wa
 sub pb_changelog {
 
 my $pb = shift;
-my $dtype = $pb->{'dtype'};
+
+my $dtype = $pb->{'pbos'}->{'type'};
 my $pbrealpkg = $pb->{'realpkg'};
 my $pbver = $pb->{'ver'};
 my $pbtag = $pb->{'tag'};
-my $pbsuf = $pb->{'suf'};
+my $pbsuf = $pb->{'pbos'}->{'suffix'};
 my $OUTPUT = shift;
 my $doit = shift;
 my $chglog = $pb->{'chglog'} || undef;
 
 my $log = "";
 
+pb_log(2,"Entering pb_changelog - pb: ".Dumper($pb)."\n");
+pb_log(2,"Entering pb_changelog - doit: $doit\n") if (defined $doit);
+pb_log(2,"Entering pb_changelog - OUTPUT: $OUTPUT\n") if (defined $OUTPUT);
 # For date handling
 $ENV{LANG}="C";
 
@@ -81,12 +85,7 @@ if ((not (defined $dtype)) || ($dtype eq "") ||
 		(not (defined $pbsuf)) || ($pbsuf eq "") || 
 		(not (defined $OUTPUT)) || ($OUTPUT eq "") ||
 		(not (defined $doit)) || ($doit eq "")) {
-	print $OUTPUT "\n";
-	return;
-}
-
-if (((not defined $chglog) || (! -f $chglog)) && ($doit eq "yes")) {
-	#pb_log(2,"No ChangeLog file ($chglog) for $pbrealpkg\n";
+	pb_log(2,"Not enough input params\n");
 	print $OUTPUT "\n";
 	return;
 }
@@ -105,15 +104,15 @@ if (not defined $pbpackager->{$ENV{'PBPROJ'}}) {
 my @date = pb_get_date();
 # If we don't need to do it, or don't have it fake something
 if (((not defined $chglog) || (! -f $chglog)) && ($doit ne "yes")) {
+	pb_log(2,"No ChangeLog file for $pbrealpkg - faking one\n");
 	$date = strftime("%Y-%m-%d", @date);
 	$ndate = &UnixDate($date,"%a", "%b", "%d", "%Y");
 	$n2date = &UnixDate($date,"%a, %d %b %Y %H:%M:%S %z");
-	if (($dtype eq "rpm") || ($dtype eq "fc")) {
+	if ($dtype eq "rpm") {
 		$ver2 = "$pbver-$pbtag";
 		print $OUTPUT "* $ndate $pbpackager->{$ENV{'PBPROJ'}} $ver2\n";
 		print $OUTPUT "- Updated to $pbver\n";
-		}
-	if ($dtype eq "deb") {
+	} elsif ($dtype eq "deb") {
 		if ($pbver !~ /^[0-9]/) {
 			# dpkg-deb doesn't accept non digit versions. 
 			# Prepending 0 in order to make updates easy hopefully
@@ -122,7 +121,9 @@ if (((not defined $chglog) || (! -f $chglog)) && ($doit ne "yes")) {
 		print $OUTPUT "$pbrealpkg ($pbver-$pbtag) unstable; urgency=low\n";
 		print $OUTPUT "  * Updated to $pbver\n";
 		print $OUTPUT " -- $pbpackager->{$ENV{'PBPROJ'}}  $n2date\n\n\n";
-		}
+	} else {
+		pb_log(0,"No ChangeLog file for $pbrealpkg and no way faking one for type $dtype\n");
+	}
 	return;
 }
 
@@ -207,6 +208,7 @@ while (<INPUT>) {
 	last if ($dtype eq "announce");
 }
 close(INPUT);
+pb_log(2,"Exiting pb_changelog\n");
 }
 
 

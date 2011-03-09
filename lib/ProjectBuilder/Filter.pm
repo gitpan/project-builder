@@ -52,10 +52,7 @@ This function gets all filters to apply. They're cumulative from the less specif
 Suffix of those filters is .pbf. Filter all.pbf applies to whatever distribution. The pbfilter directory may be global under pbconf or per package, for overloading values. Then in order filters are loaded for distribution type, distribution family, distribution name, distribution name-version.
 
 The first parameter is the package name.
-The second parameter is the distribution type.
-The third parameter is the distribution family.
-The fourth parameter is the distribution name.
-The fifth parameter is the distribution version.
+The second parameter is OS hash
 
 The function returns a pointer on a hash of filters.
 
@@ -64,60 +61,70 @@ The function returns a pointer on a hash of filters.
 sub pb_get_filters {
 
 my @ffiles;
-my ($ffile00, $ffile0, $ffile1, $ffile2, $ffile3);
-my ($mfile00, $mfile0, $mfile1, $mfile2, $mfile3);
+my ($ffile00, $ffile0, $ffile1, $ffile2, $ffile3, $ffile4, $ffile5);
+my ($mfile00, $mfile0, $mfile1, $mfile2, $mfile3, $mfile4, $mfile5);
 my $pbpkg = shift || die "No package specified";
-my $dtype = shift || "";
-my $dfam = shift || "";
-my $ddir = shift || "";
-my $dver = shift || "";
+my $pbos = shift;
 my $ptr = undef; # returned value pointer on the hash of filters
 my %h;
 
+pb_log(2,"Entering pb_get_filters - pbpkg: $pbpkg - pbos: ".Dumper($pbos)."\n");
 # Global filter files first, then package specificities
 if (-d "$ENV{'PBROOTDIR'}/pbfilter") {
 	$mfile00 = "$ENV{'PBROOTDIR'}/pbfilter/all.pbf" if (-f "$ENV{'PBROOTDIR'}/pbfilter/all.pbf");
-	$mfile0 = "$ENV{'PBROOTDIR'}/pbfilter/$dtype.pbf" if (-f "$ENV{'PBROOTDIR'}/pbfilter/$dtype.pbf");
-	$mfile1 = "$ENV{'PBROOTDIR'}/pbfilter/$dfam.pbf" if (-f "$ENV{'PBROOTDIR'}/pbfilter/$dfam.pbf");
-	$mfile2 = "$ENV{'PBROOTDIR'}/pbfilter/$ddir.pbf" if (-f "$ENV{'PBROOTDIR'}/pbfilter/$ddir.pbf");
-	$mfile3 = "$ENV{'PBROOTDIR'}/pbfilter/$ddir-$dver.pbf" if (-f "$ENV{'PBROOTDIR'}/pbfilter/$ddir-$dver.pbf");
+	if (defined $pbos) {
+		$mfile0 = "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'os'}.pbf" if ((defined $pbos->{'os'}) && (-f "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'os'}.pbf"));
+		$mfile1 = "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'type'}.pbf" if ((defined $pbos->{'type'}) && (-f "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'type'}.pbf"));
+		$mfile2 = "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'family'}.pbf" if ((defined $pbos->{'family'}) && (-f "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'family'}.pbf"));
+		$mfile3 = "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'name'}.pbf" if ((defined $pbos->{'name'}) && (-f "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'name'}.pbf"));
+		$mfile4 = "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'name'}-$pbos->{'version'}.pbf" if ((defined $pbos->{'name'}) && (defined $pbos->{'version'}) && (-f "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'name'}-$pbos->{'version'}.pbf"));
+		$mfile5 = "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}.pbf" if ((defined $pbos->{'name'}) && (defined $pbos->{'version'}) && (defined $pbos->{'arch'}) && (-f "$ENV{'PBROOTDIR'}/pbfilter/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}.pbf"));
+	}
 
 	push @ffiles,$mfile00 if (defined $mfile00);
 	push @ffiles,$mfile0 if (defined $mfile0);
 	push @ffiles,$mfile1 if (defined $mfile1);
 	push @ffiles,$mfile2 if (defined $mfile2);
 	push @ffiles,$mfile3 if (defined $mfile3);
+	push @ffiles,$mfile4 if (defined $mfile4);
+	push @ffiles,$mfile5 if (defined $mfile5);
 }
 
 if (-d "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter") {
 	$ffile00 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/all.pbf" if (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/all.pbf");
-	$ffile0 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$dtype.pbf" if (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$dtype.pbf");
-	$ffile1 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$dfam.pbf" if (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$dfam.pbf");
-	$ffile2 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$ddir.pbf" if (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$ddir.pbf");
-	$ffile3 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$ddir-$dver.pbf" if (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$ddir-$dver.pbf");
-
+	if (defined $pbos) {
+		$ffile0 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'os'}.pbf" if ((defined $pbos->{'os'}) && (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'os'}.pbf"));
+		$ffile1 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'type'}.pbf" if ((defined $pbos->{'type'}) && (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'type'}.pbf"));
+		$ffile2 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'family'}.pbf" if ((defined $pbos->{'family'}) && (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'family'}.pbf"));
+		$ffile3 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'name'}.pbf" if ((defined $pbos->{'name'}) && (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'name'}.pbf"));
+		$ffile4 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'name'}-$pbos->{'version'}.pbf" if ((defined $pbos->{'name'}) && (defined $pbos->{'version'}) && (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'name'}-$pbos->{'version'}.pbf"));
+		$ffile5 = "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}.pbf" if ((defined $pbos->{'name'}) && (defined $pbos->{'version'}) && (defined $pbos->{'arch'}) && (-f "$ENV{'PBROOTDIR'}/$pbpkg/pbfilter/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}.pbf"));
+	}
 	push @ffiles,$ffile00 if (defined $ffile00);
 	push @ffiles,$ffile0 if (defined $ffile0);
 	push @ffiles,$ffile1 if (defined $ffile1);
 	push @ffiles,$ffile2 if (defined $ffile2);
 	push @ffiles,$ffile3 if (defined $ffile3);
+	push @ffiles,$ffile4 if (defined $ffile4);
+	push @ffiles,$ffile5 if (defined $ffile5);
 }
 if (@ffiles) {
 	pb_log(2,"DEBUG ffiles: ".Dumper(\@ffiles)."\n");
 
 	foreach my $f (@ffiles) {
+		pb_log(3,"DEBUG processing filter file $f\n");
 		open(CONF,$f) || next;
 		while(<CONF>)  {
 			if (/^\s*([A-z0-9-_]+)\s+([[A-z0-9-_]+)\s*=\s*(.+)$/) {
+				pb_log(3,"DEBUG creating entry $1, key $2, value $3\n");
 				$h{$1}{$2}=$3;
 			}
 		}
 		close(CONF);
-
-		$ptr = $h{"filter"};
-		pb_log(2,"DEBUG f:".Dumper($ptr)."\n");
 	}
+	$ptr = $h{"filter"};
 }
+pb_log(2,"DEBUG f:".Dumper($ptr)."\n") if (defined $ptr);
 return($ptr);
 }
 
@@ -128,7 +135,7 @@ This function applies all filters to files.
 It takes 4 parameters.
 
 The first parameter is the file to filter.
-The second parameter is the pointer on the hash of filters.
+The second parameter is the pointer on the hash of filters. If undefined no filtering will occur.
 The third parameter is the destination file after filtering.
 The fourth parameter is the pointer on the hash of variables to filter (tag, ver, ...)
 
@@ -138,11 +145,19 @@ sub pb_filter_file {
 
 my $f=shift;
 my $ptr=shift;
-my %filter=%$ptr;
+my %filter;
+if (defined $ptr) {
+	%filter=%$ptr;
+} else {
+	%filter = ();
+}
 my $destfile=shift;
 my $pb=shift;
+my $tuple = "unknown";
+$tuple = "$pb->{'pbos'}->{'name'}-$pb->{'pbos'}->{'version'}-$pb->{'pbos'}->{'arch'}" if (defined $pb->{'pbos'});
 
-pb_log(2,"DEBUG: From $f to $destfile\n");
+pb_log(2,"DEBUG: From $f to $destfile (tuple: $tuple)\n");
+pb_log(3,"DEBUG($tuple): pb ".Dumper($pb)."\n");
 pb_mkdir_p(dirname($destfile)) if (! -d dirname($destfile));
 open(DEST,"> $destfile") || die "Unable to create $destfile: $!";
 open(FILE,"$f") || die "Unable to open $f: $!";
@@ -172,27 +187,38 @@ while (<FILE>) {
 			pb_changelog($pb, \*DEST, $tmp);
 			$tmp = "";
 		} elsif (($s =~ /^PBPATCHSRC$/) && ($line =~ /^PBPATCHSRC$/)) {
-			pb_log(3,"DEBUG filtering PBPATCHSRC\n");
+			pb_log(3,"DEBUG($tuple) filtering PBPATCHSRC\n");
 			my $i = 0;
-			foreach my $p (split(/,/,$pb->{'patches'}->{$pb->{'tuple'}})) {
-				print DEST "Patch$i:         ".basename($p).".gz\n";
-				$i++;
+			pb_log(3,"DEBUG($tuple): pb ".Dumper($pb)."\n");
+			pb_log(3,"DEBUG($tuple): pb/patches/tuple $pb->{'patches'}->{$tuple}\n");
+			if (defined $pb->{'patches'}->{$tuple}) {
+				foreach my $p (split(/,/,$pb->{'patches'}->{$tuple})) {
+					pb_log(3,"DEBUG($tuple) Adding patch $i ".basename($p)."\n");
+					print DEST "Patch$i:         ".basename($p).".gz\n";
+					$i++;
+				}
 			}
 			$tmp = "";
 		} elsif (($s =~ /^PBMULTISRC$/) && ($line =~ /^PBMULTISRC$/)) {
-			pb_log(3,"DEBUG filtering PBMULTISRC\n");
+			pb_log(3,"DEBUG($tuple) filtering PBMULTISRC\n");
 			my $i = 1;
-			foreach my $p (split(/,/,$pb->{'sources'}->{$pb->{'tuple'}})) {
-				print DEST "Source$i:         ".basename($p)."\n";
-				$i++;
+			if (defined $pb->{'sources'}->{$tuple}) {
+				foreach my $p (split(/,/,$pb->{'sources'}->{$tuple})) {
+					pb_log(3,"DEBUG($tuple) Adding source $i ".basename($p)."\n");
+					print DEST "Source$i:         ".basename($p)."\n";
+					$i++;
+				}
 			}
 			$tmp = "";
 		} elsif (($s =~ /^PBPATCHCMD$/) && ($line =~ /^PBPATCHCMD$/)) {
-			pb_log(3,"DEBUG filtering PBPATCHCMD\n");
+			pb_log(3,"DEBUG($tuple) filtering PBPATCHCMD\n");
 			my $i = 0;
-			foreach my $p (split(/,/,$pb->{'patches'}->{$pb->{'tuple'}})) {
-				print DEST "%patch$i -p1\n";
-				$i++;
+			if (defined $pb->{'patches'}->{$tuple}) {
+				foreach my $p (split(/,/,$pb->{'patches'}->{$tuple})) {
+					pb_log(3,"DEBUG($tuple) Adding patch command $i\n");
+					print DEST "%patch$i -p1\n";
+					$i++;
+				}
 			}
 			print DEST "\n";
 			$tmp = "";
@@ -221,11 +247,10 @@ The third parameter is the pointer on the hash of variables to filter (tag, ver,
 sub pb_filter_file_inplace {
 
 my $ptr=shift;
-my %filter=%$ptr;
 my $destfile=shift;
 my $pb=shift;
 
-my $cp = "$ENV{'PBTMP'}/".basename($destfile);
+my $cp = "$ENV{'PBTMP'}/".basename($destfile).".$$";
 copy($destfile,$cp) || die "Unable to copy $destfile to $cp";
 
 pb_filter_file($cp,$ptr,$destfile,$pb);

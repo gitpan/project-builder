@@ -1,8 +1,165 @@
-2011-01-15  Bruno Cornec <bruno@project-builder.org>
+2011-02-27  Bruno Cornec <bruno@project-builder.org>
 
-	* [r1162] Creation of
-	  svn+ssh://svn.project-builder.org/mondo/svn/pb///0.10.1 from
-	  svn+ssh://svn.project-builder.org/mondo/svn/pb//devel
+	* [r1235] bin/pb: - Fix a debian build bug due to directory change
+	  (backport from devel to 0.11.1)
+
+2011-02-26  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1230] Creation of
+	  svn+ssh://svn.project-builder.org/prj/svn/pb///0.11.1 from
+	  svn+ssh://svn.project-builder.org/prj/svn/pb//devel
+	* [r1225] - postpone execution of pbinit after all files have been
+	  filtered so that e.g. a configure.in be filtered before a
+	  bootstrap script being executed and all variables expanded
+	  correctly. Case of MondoRescue
+
+2011-02-24  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1221] - Fixes again for ntp command which was wrong
+	* [r1220] - Fix syntax
+	* [r1219] - Fix #87. This requires to update pb in the VM|RM|VE in
+	  order to work correctly.
+	* [r1218] - Fix #86 (ndoualot) - error in hash test sources should
+	  be used and not patches.
+	  - Improve tmout management again using pb_distro_get_param
+	* [r1217] - *tmout param is optional and now handled and documented
+	  as such
+	* [r1216] - rmntpcmd, vmhost, vmmem, vmntpcmd and vmsize have OS
+	  keys and not project keys. Fixed in doc and code.
+	  - Document [web]sshdir|port|login|host
+	  - pb_date2v needs the pbos as param to deal with *ntpcmd
+	  correctly. $v param removed as a consequence.
+
+2011-02-23  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1215] - Fix #83. rmntp is indeed optional. But rmntpcmd is
+	  mandatory as used to be placed at setup time in the sudoers file
+	  in order to allow its usage by root when needed from the build
+	  account
+
+2011-02-20  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1212] - pb_mkdir_p doesn't return anything anymore. Test of
+	  return removed.
+	  - Packages installed are not using really the install command not
+	  the update one.
+
+2011-02-19  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1208] - Fix a typo in CMS.pm
+	  - Try to fix an issue when starting from a clean env (only one
+	  package built instead of 3 the first time)
+
+2011-02-18  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1207]
+	* [r1206]
+
+2011-02-17  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1203] - Fix a typo
+	* [r1200] - the repo key for pb now uses the delivery level
+	  (mandatory for gentoo)
+	* [r1198] - Fix sudoers format fr env_keep (at least on gentoo)
+	  - Fix pb_get_sudocmds to deal correctly with additional params,
+	  and handle correctly spaces before sudo
+	  - Add full path names on sudo commands for gentoo
+
+2011-02-16  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1197] - Typo fixed for ospathcmd
+	* [r1194] - Fix halt invokation which was broken (full path now)
+	* [r1192] - Fix pb_get_filters to also support filter based on os
+	  name and os-ver-arch as well to be coherent, and also fix bugs in
+	  the tests made for filter exitence.
+	  - Fix pb_changelog with test for correct pb hash values which
+	  were changed previously
+	  - Revert back using no arch subdir for deb based repo
+	  - Introduce new parameter oscmdpath to support external commands
+	  full path name easier (could also be very useful for MondoRescue)
+	  - Another set of fixes for sudo comands support: no parameter
+	  taken in account, replace localhost by ALL to avoid nightmares
+	  with VMs naming
+
+2011-02-15  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1190] - Fix bugs in sudoers generation (syntax issue)
+	  - Improve pb_get_sudocmds to remov duplicates, and take an
+	  additional list of commands to filter
+	  - Change pb_date2v interface to just return the line we want.
+	* [r1189] - Fix a parallelism issue when building in VMs. This
+	  change forces again to update VMs in order to have compatible pb
+	  exchnaging info between themselves with a new name of exchange
+	  file.
+
+2011-02-14  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1186] - Fix now pateches and sources delivery in parallel mode
+	  completely.
+	* [r1185] - Fix pb for patches and additional sources support in
+	  parallel mode which was previously broken
+	* [r1184] - Avoids a unicity issue when in parallel mode in
+	  pb_filter_file_inplace, by generating a unique temp file.
+	* [r1183] - Allow pb_filter_file to manage undefined filter hash
+
+2011-02-12  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1181] - Fix rpmbootstrap and pb newve order, which wasn't
+	  working after the latest pbos introduction
+	  - rpmbootstrap wasn't using the right conf file when launched
+	  with sudo is fixed by using the SUDO_USER env. var.
+	  - pb.conf rbsmirrorsrv now uses pbos var, and is filtered
+	  correctly.
+
+2011-02-11  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1180] remove some undefined cases not tested
+	* [r1179] r4166@localhost: bruno | 2011-02-11 11:55:19 +0100
+	  - Adds support for RM (Romte Machines) in addition to VE/VM
+	  - Detail security aspects in pb, especially for RM setup with
+	  sudo (to be improved) in file SECURITY in pb-doc
+	  - Use some full path names for commands to improve security with
+	  sudo (for RM). This should be externalized later on to support OS
+	  contexts.
+	  - pb_get_port function now needs the ref to the pbos
+	  - pb_get_sudocmds function added to provide the external list of
+	  commands called by sudo in osupd or osins
+	  - Adds codenames for Debian 6.0 and Ubuntu 11.04
+	  
+
+2011-02-07  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1177] r4161@eelzbach2: bruno | 2011-02-06 21:07:30 +0100
+	  - Introduction of a new hash $pbos to manage all os related info
+	  through a single data structure. All functions reviewed
+	  accordingly. Externally transparent, hopefully, but much cleaner
+	  code as a consequence. VM/VE/RM remains to be tested.
+	* [r1176] r4160@eelzbach2: bruno | 2011-02-06 13:30:39 +0100
+	  - Adds support for Remote Machines (RM). Not tested yet.
+
+2011-02-04  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1174] - Fix ebuild test name generation (Report Francesco)
+	  - Fix project package generation from file URL
+	  - Introduce hpux entry (not working)
+	  - pb_cms_mod_http renamed pb_cms_mod_htftp and also now handles
+	  ftp protocol
+	  - Fix pb_cms_compliant for file URL build
+
+2011-02-03  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1173] -Add somr structure creation in case we start from
+	  nothing and fix display for deb pkg generation
+
+2011-02-02  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1172] Fix a bug when initializing a pb env without anything
+	  previously available exept the \/bruno/.pbrc
+
+2011-01-18  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1165] - Fix a bug in Web delivery where the pbscript wasn't
+	  executable by default which now is a problem.
 
 2011-01-13  Bruno Cornec <bruno@project-builder.org>
 

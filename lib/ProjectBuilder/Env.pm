@@ -58,7 +58,19 @@ It sets up environment variables (PBETC)
 
 sub pb_env_init_pbrc {
 
-$ENV{'PBETC'} = "$ENV{'HOME'}/.pbrc";
+# if sudo, then get the real id of the user laucnhing the context 
+# to point to the right conf file
+# Mandatory for rpmbootstrap calls
+my $dir;
+
+if (defined $ENV{'SUDO_USER'}) {
+	# Home dir is the 8th field in list context
+	$dir = (getpwnam($ENV{'SUDO_USER'}))[7];
+} else {
+	$dir = $ENV{'HOME'};
+}
+
+$ENV{'PBETC'} = "$dir/.pbrc";
 
 if (! -f $ENV{'PBETC'}) {
 	pb_log(0, "No existing $ENV{'PBETC'} found, creating one as template\n");
@@ -94,7 +106,8 @@ if (! -f $ENV{'PBETC'}) {
 
 # where to find Build System infos:
 #vmpath default = /home/qemu
-#vepath default = /home/rinse
+#vepath default = /home/rpmbootstrap
+#rmpath default = /home/remote
 
 # Overwrite generic setup
 #vmport pb = 2223
@@ -167,9 +180,10 @@ if (not defined ($pbconf{$ENV{'PBPROJ'}})) {
 
 # Adds a potential conf file now as it's less 
 # important than the project conf file
-my ($vmpath,$vepath) = pb_conf_get_if("vmpath","vepath");
+my ($vmpath,$vepath,$rmpath) = pb_conf_get_if("vmpath","vepath","rmpath");
 pb_conf_add("$vmpath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $vmpath) && (-f "$vmpath->{$ENV{'PBPROJ'}}/.pbrc"));
 pb_conf_add("$vepath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $vepath) && (-f "$vepath->{$ENV{'PBPROJ'}}/.pbrc"));
+pb_conf_add("$rmpath->{$ENV{'PBPROJ'}}/.pbrc") if ((defined $rmpath) && (-f "$rmpath->{$ENV{'PBPROJ'}}/.pbrc"));
 
 #
 # Detect the root dir for hosting all the content generated with pb
@@ -240,7 +254,7 @@ if ($action =~ /^newproj$/) {
 		# TODO: There is also the need to do 
 		# svn import "$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}" svn://repo
 		# in case it doesn't exist there
-		pb_mkdir_p("$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}") || die "Unable to recursively create $ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}";
+		pb_mkdir_p("$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}");
 	}
 	pb_cms_add($pbconf{$ENV{'PBPROJ'}},"$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}");
 }
@@ -268,7 +282,7 @@ if ((-d $ENV{'PBDESTDIR'}) && ($action !~ /pbinit/)) {
 	closedir(DIR);
 }
 if (! -d "$ENV{'PBDESTDIR'}") {
-	pb_mkdir_p($ENV{'PBDESTDIR'}) || die "Unable to recursively create $ENV{'PBDESTDIR'}";
+	pb_mkdir_p($ENV{'PBDESTDIR'});
 }
 
 #
@@ -276,17 +290,17 @@ if (! -d "$ENV{'PBDESTDIR'}") {
 #
 $ENV{'PBBUILDDIR'}="$ENV{'PBDEFDIR'}/$ENV{'PBPROJ'}/build";
 if (! -d "$ENV{'PBBUILDDIR'}") {
-	pb_mkdir_p($ENV{'PBBUILDDIR'}) || die "Unable to recursively create $ENV{'PBBUILDDIR'}";
+	pb_mkdir_p($ENV{'PBBUILDDIR'});
 }
 
 pb_log(2,"PBBUILDDIR: $ENV{'PBBUILDDIR'}\n");
 
+return if ($action =~ /^clean$/);
 #
-# The following part is only useful when in cms2something or newsomething
-# In VMs/VEs we want to skip that by providing good env vars.
+# The following part is only useful when in sbx|cms2something or newsomething
+# In VMs/VEs/RMs we want to skip that by providing good env vars.
 # return values in that case are useless
 #
-return if ($action =~ /^clean$/);
 
 if (($action =~ /^cms2/) || ($action =~ /^sbx2/) || ($action =~ /^newver$/) || ($action =~ /pbinit/) || ($action =~ /^newproj$/) || ($action =~ /^announce/)) {
 
@@ -534,7 +548,7 @@ EOF
 EOF
 			}
 			close(CONF);
-			pb_mkdir_p("$ENV{'PBROOTDIR'}/pbfilter") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter";
+			pb_mkdir_p("$ENV{'PBROOTDIR'}/pbfilter");
 			open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/all.pbf") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/all.pbf";
 			print CONF << "EOF";
 #
@@ -746,7 +760,7 @@ EOF
 EOF
 			close(CONF);
 			foreach my $pp (@pkgs) {
-				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/deb") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/deb";
+				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/deb");
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/deb/control") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/deb/control";
 				print CONF << "EOF";
 Source: PBPKG
@@ -964,7 +978,7 @@ binary: binary-arch binary-indep
 
 EOF
 				close(CONF);
-				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/rpm") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/rpm";
+				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/rpm");
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/rpm/$pp.spec") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/rpm/$pp.spec";
 				print CONF << 'EOF';
 #
@@ -1032,8 +1046,8 @@ filter PBSOLPKG = SUNWsoftware
 
 EOF
 				close(CONF);
-				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pbfilter") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pbfilter";
-				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pkg") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg";
+				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pbfilter");
+				pb_mkdir_p("$ENV{'PBROOTDIR'}/$pp/pkg");
 				open(CONF,"> $ENV{'PBROOTDIR'}/$pp/pkg/pkginfo") || die "Unable to create $ENV{'PBROOTDIR'}/$pp/pkg/pkginfo";
 				print CONF << 'EOF';
 #
