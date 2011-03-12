@@ -127,6 +127,8 @@ if (((not defined $chglog) || (! -f $chglog)) && ($doit ne "yes")) {
 	return;
 }
 
+die "No changelog file for $pbrealpkg found at $ENV{'PBROOTDIR'}/$pbrealpkg/pbcl" if (not defined $chglog);
+
 open(INPUT,"$chglog") || die "Unable to open $chglog (read)";
 
 # Skip first 4 lines

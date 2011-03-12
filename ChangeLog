@@ -1,13 +1,50 @@
+2011-03-12  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1268] bin/pb: - Fix #94 RM parallel building doesn't comply
+	  with user defined settings
+	  - 0.11.2 is not under the test dir !!!
+	* [r1265] Creation of
+	  svn+ssh://svn.project-builder.org/prj/svn/pb///0.11.2 from
+	  svn+ssh://svn.project-builder.org/prj/svn/pb//devel
+	* [r1262] - Fix doc generation for pb.conf.pod
+	* [r1261] - Fix #82 Undescriptive error message for missing pbcl
+	  file
+	* [r1260] - Fix #90 - cms2webssh broken
+	* [r1259] - Fix #92 as well as documentation generation which was
+	  also broken (linufr.org report)
+	* [r1257] - Updated Lab for TES 2011
+
+2011-03-11  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1256] - Adds filter geenration at newproj time for more
+	  debian/ubuntu distros
+	* [r1255] - Call pb_get_ssh also for VE to build local keys
+	* [r1252] - Fix bug #95 Personalized FILTER accessing an item in an
+	  hash of a hash
+	* [r1249] r4310@localhost: bruno | 2011-03-10 21:29:54 +0100
+	  - Fix a bug in newvm where VMsize was incorrectly used after pbos
+	  introduction.
+	* [r1248] r4309@localhost: bruno | 2011-03-10 20:33:01 +0100
+	  - Update presentation for TES 2011
+
+2011-03-09  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1247] - Fix #91 where announce was broken and add pkg and sd
+	  pakgs to the list
+	* [r1246] - Fix #89 where sources.list files generated were
+	  incorrect
+
+2011-03-08  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1242] r4260@jfallet1: bruno | 2011-03-08 23:32:48 +0100
+	  - Add support for patches and additional sources also for Solaris
+
 2011-02-27  Bruno Cornec <bruno@project-builder.org>
 
-	* [r1235] bin/pb: - Fix a debian build bug due to directory change
-	  (backport from devel to 0.11.1)
+	* [r1234] - Fix a debian build bug due to directory change
 
 2011-02-26  Bruno Cornec <bruno@project-builder.org>
 
-	* [r1230] Creation of
-	  svn+ssh://svn.project-builder.org/prj/svn/pb///0.11.1 from
-	  svn+ssh://svn.project-builder.org/prj/svn/pb//devel
 	* [r1225] - postpone execution of pbinit after all files have been
 	  filtered so that e.g. a configure.in be filtered before a
 	  bootstrap script being executed and all variables expanded

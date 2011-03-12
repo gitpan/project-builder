@@ -735,6 +735,93 @@ filter PBDEBCOMP = 7
 
 EOF
 			close(CONF);
+			# 6?
+			foreach my $ubv ("debian.pbf") {
+				open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/$ubv") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/$ubv";
+				print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for debian build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.8.0
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 7
+
+EOF
+				close(CONF);
+			}
+			foreach my $ubv ("ubuntu-6.06.pbf","ubuntu-7.04.pbf","ubuntu-7.10.pbf") {
+				open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/$ubv") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/$ubv";
+				print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for ubuntu build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.6.2
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 4
+
+EOF
+				close(CONF);
+			}
+			foreach my $ubv ("ubuntu-8.04.pbf","ubuntu-8.10.pbf") {
+				open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/$ubv") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/$ubv";
+				print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for ubuntu build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.7.3
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 4
+
+EOF
+				close(CONF);
+			}
+			foreach my $ubv ("ubuntu-9.04.pbf") {
+				open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/$ubv") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/$ubv";
+				print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for ubuntu build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.8.0
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 4
+
+EOF
+				close(CONF);
+			}
+			# 9.10, 10.04, 10.10
+			foreach my $ubv ("ubuntu.pbf") {
+				open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/$ubv") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/$ubv";
+				print CONF << "EOF";
+#
+# \$Id\$
+#
+# Filter for ubuntu build
+#
+# PBDEBSTD is replaced by the Debian standard version
+filter PBDEBSTD = 3.8.3
+
+# PBDEBCOMP is replaced by the Debian Compatibility value
+filter PBDEBCOMP = 7
+
+EOF
+				close(CONF);
+			}
 			open(CONF,"> $ENV{'PBROOTDIR'}/pbfilter/md.pbf") || die "Unable to create $ENV{'PBROOTDIR'}/pbfilter/md.pbf";
 			print CONF << "EOF";
 # Specific group for Mandriva for $ENV{'PBPROJ'}

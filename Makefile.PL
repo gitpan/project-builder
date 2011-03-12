@@ -6,7 +6,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME         => 'pb',
     DISTNAME     => 'project-builder',
-    VERSION      => '0.11.1',
+    VERSION      => '0.11.2',
     INST_SCRIPT  => 'blib/bin',
 	INSTALLDIRS  => 'perl',
     PREREQ_PM    => {

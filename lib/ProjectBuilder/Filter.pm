@@ -172,8 +172,8 @@ while (<FILE>) {
 		if ($tmp =~ /\$/) {
 			pb_log(3,"*** Filtering variable in $tmp ***\n");
 			# Order is important as we need to handle hashes refs before simple vars
-			eval { $tmp =~ s/(\$\w+-\>\{\'\w+\'\})/$1/eeg };
-			eval { $tmp =~ s/(\$\w+)/$1/eeg };
+			# (?: introduce a Non-capturing groupings cf man perlretut
+			eval { $tmp =~ s/(\$\w+(?:-\>\{\'\w+\'\})*)/$1/eeg };
 			if (($s =~ /^PBDESC$/) && ($line =~ /^ PBDESC/)) {
 				# if on debian, we need to preserve the space before each desc line
 				pb_log(3,"*** DEBIAN CASE ADDING SPACE ***\n");

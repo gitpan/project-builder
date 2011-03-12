@@ -2,6 +2,21 @@
 
 PB CHANGES
 
+0.11.2 (2011-03-12)
+- Fix #82 Undescriptive error message for missing pbcl file (Bruno Cornec)
+- Fix #90 - cms2webssh broken (Bruno Cornec)
+- Fix #92 as well as documentation generation which was also broken (linufr.org report) (Bruno Cornec)
+- Adds filter generation at newproj time for more debian/ubuntu distros (Bruno Cornec)
+- Call pb_get_ssh also for VE to build local keys (Bruno Cornec)
+- Fix bug #95 Personalized FILTER accessing an item in an hash of a hash (Bruno Cornec)
+- Fix a bug in newvm where VMsize was incorrectly used after pbos introduction. (Bruno Cornec)
+- Fix #91 where announce was broken and add pkg and sd pakgs to the list (Bruno Cornec)
+- Fix #89 where sources.list files generated were incorrect (Bruno Cornec)
+- Add support for patches and additional sources also for Solaris (Bruno Cornec)
+- Fix a debian build bug due to directory change (Bruno Cornec)
+- Postpone execution of pbinit after all files have been filtered so that e.g. a configure.in be filtered before a bootstrap script being executed and all variables expanded correctly. Case of MondoRescue (Bruno Cornec)
+- Updated Lab and pres for TES 2011 (Bruno Cornec)
+
 0.11.1 (2011-02-26)
 - NOTE: This version requires 0.11.1 in both host and guests so the whole processes work correctly. (Bruno Cornec)
 - Fix #87 - correct pbsrc management. This requires to update pb in the VM|RM|VE in order to work correctly (Nicolas Doualot/Bruno Cornec)

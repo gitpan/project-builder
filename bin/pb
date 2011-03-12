@@ -4,7 +4,7 @@
 #
 # $Id$
 #
-# Copyright B. Cornec 2007
+# Copyright B. Cornec 2007-2011
 # Provided under the GPL v2
 
 # Syntax: see at end
@@ -755,7 +755,6 @@ sub pb_cms2build {
 	my ($pkgv, $pkgt, $testver) = pb_conf_get_if("pkgver","pkgtag","testver");
 
 	# declare packager and repo for filtering
-	# TODO: Is pbrepo needed so early in the process ?
 	my ($tmp1, $tmp2) = pb_conf_get("pbpackager","pbrepo");
 	$ENV{'PBPACKAGER'} = $tmp1->{$ENV{'PBPROJ'}};
 	$ENV{'PBREPO'} = $tmp2->{$ENV{'PBPROJ'}};
@@ -800,7 +799,7 @@ sub pb_cms2build {
 		$dir = $extpkgdir->{$pbpkg} if (not defined $dir);
 		$dir = $webdir->{$ENV{'PBPROJ'}} if (defined $web);
 		die "Variable \$dir not defined. Please report to dev team with log of a verbose run and this info ".Dumper($webdir) if (not defined $dir);
-		pb_log(2,"def:".Dumper($defpkgdir)." ext: ".Dumper($extpkgdir)." \n");
+		pb_log(2,"def:".Dumper($defpkgdir)."ext: ".Dumper($extpkgdir)."dir: $dir\n");
 
 		# Exporting content from CMS
 		my $sourcedir = undef;
@@ -814,7 +813,7 @@ sub pb_cms2build {
 			my ($scheme, $account, $host, $port, $path) = pb_get_uri($uri);
 			if (($scheme !~ /^file/) && ($scheme !~ /^(ht|f)tp/)) {
 				$sourceuri = "$ENV{'PBDIR'}/$dir"; 
-				$sourceuri =~ s|^$ENV{'PBPROJDIR'}/|$uri|;
+				$sourceuri =~ s|^$ENV{'PBPROJDIR'}/|$uri/|;
 			}
 		}
 		my $preserve = pb_cms_export($sourceuri,$sourcedir,$dest);
@@ -1066,33 +1065,6 @@ sub pb_cms2build {
 			pb_log(0,"Build files have been generated for ... ".join(',',sort(@found))."\n") if (@found);
 			pb_log(0,"No Build files found for ".join(',',sort(@notfound))."\n") if (@notfound);
 
-			# Apply filters to the non-build files
-			my $liste ="";
-			if (defined $filteredfiles->{$pbpkg}) {
-				foreach my $f (split(/,/,$filteredfiles->{$pbpkg})) {
-					pb_filter_file_inplace($ptr,"$dest/$f",$pb);
-					$liste = "$f $liste";
-				}
-			}
-			pb_log(2,"Files ".$liste."have been filtered\n");
-
-			# TODO: Make it CMS aware
-			# Execute the pbinit script if any
-			if (-x "$ENV{'PBROOTDIR'}/$pbpkg/pbinit") {
-				pb_filter_file("$ENV{'PBROOTDIR'}/$pbpkg/pbinit",$ptr,"$ENV{'PBTMP'}/pbinit",$pb);
-				chmod 0755,"$ENV{'PBTMP'}/pbinit";
-				pb_system("cd $dest ; $ENV{'PBTMP'}/pbinit","Executing init script from $ENV{'PBROOTDIR'}/$pbpkg/pbinit under $dest","verbose");
-			}
-
-			# Do we have additional script to run to prepare the environement for the project ? 
-			# Then include it in the pbconf delivery
-			foreach my $pbvf (<$ENV{'PBROOTDIR'}/pbv*.pre>,<$ENV{'PBROOTDIR'}/pbv*.post>, <$ENV{'PBROOTDIR'}/pbtest*>) {
-				if (-x "$pbvf") {
-					my $target = "$ENV{'PBDESTDIR'}/".basename($pbvf);
-					pb_filter_file("$pbvf",$ptr,$target,$pb);
-					chmod 0755,"$target";
-				}
-			}
 		} else {
 			# Instead call News generation
 			pb_web_news2html($dest);
@@ -1111,6 +1083,34 @@ sub pb_cms2build {
 			print SCRIPT "rmdir $pbpkg-$pbver\n";
 			close(SCRIPT);
 			chmod 0755,"$ENV{'PBTMP'}/pbscript";
+		}
+
+		# Apply filters to the non-build files
+		my $liste ="";
+		if (defined $filteredfiles->{$pbpkg}) {
+			foreach my $f (split(/,/,$filteredfiles->{$pbpkg})) {
+				pb_filter_file_inplace($ptr,"$dest/$f",$pb);
+				$liste = "$f $liste";
+			}
+		}
+		pb_log(2,"Files ".$liste."have been filtered\n");
+
+		# TODO: Make it CMS aware
+		# Execute the pbinit script if any
+		if (-x "$ENV{'PBROOTDIR'}/$pbpkg/pbinit") {
+			pb_filter_file("$ENV{'PBROOTDIR'}/$pbpkg/pbinit",$ptr,"$ENV{'PBTMP'}/pbinit",$pb);
+			chmod 0755,"$ENV{'PBTMP'}/pbinit";
+			pb_system("cd $dest ; $ENV{'PBTMP'}/pbinit","Executing init script from $ENV{'PBROOTDIR'}/$pbpkg/pbinit under $dest","verbose");
+		}
+
+		# Do we have additional script to run to prepare the environement for the project ? 
+		# Then include it in the pbconf delivery
+		foreach my $pbvf (<$ENV{'PBROOTDIR'}/pbv*.pre>,<$ENV{'PBROOTDIR'}/pbv*.post>, <$ENV{'PBROOTDIR'}/pbtest*>) {
+			if (-x "$pbvf") {
+				my $target = "$ENV{'PBDESTDIR'}/".basename($pbvf);
+				pb_filter_file("$pbvf",$ptr,$target,$pb);
+				chmod 0755,"$target";
+			}
 		}
 
 		# Prepare the dest directory for archive
@@ -1366,6 +1366,12 @@ sub pb_build2pkg {
 			pb_mkdir_p("$pkgdestdir/delivery");
 			pb_system("tar xfz $src","Extracting sources under $ENV{'PBBUILDDIR'}");
 			pb_system("tar xfz $src2","Extracting pbconf under $ENV{'PBBUILDDIR'}");
+			# We need to handle potential patches to upstream sources
+			pb_extract_build_files($src2,"$pbpkg-$pbver/pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbpatch/","$ENV{'PBBUILDDIR'}/SOURCES","patch");
+
+			# We need to handle potential additional sources to upstream sources
+			pb_extract_build_files($src2,"$pbpkg-$pbver/pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbsrc/","$ENV{'PBBUILDDIR'}/SOURCES","src");
+
 			chdir "$pbpkg-$pbver" || die "Unable to chdir to $pbpkg-$pbver";
 			if (-f "pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbbuild") {
 				chmod 0755,"pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbbuild";
@@ -1780,10 +1786,8 @@ EOF
 		} elsif ($pbos->{'type'} eq "deb") {
 			# Also make a pbscript to generate apt bases
 			# Cf: http://www.debian.org/doc/manuals/repository-howto/repository-howto.fr.html
-			# This dirname removes arch
+			# This dirname removes ver
 			my $rpd = dirname("$pbrepo->{$ENV{'PBPROJ'}}/$repodir");
-			# this one removes the ver
-			$rpd = dirname($rpd);
 			print PBS << "EOF";
 #!/bin/bash
 # Prepare a script to ease apt setup
@@ -2093,8 +2097,9 @@ sub pb_launchv {
 		die "-i iso parameter needed" if (((not defined $iso) || ($iso eq "")) && ($create != 0));
 
 		# TODO: vmmonport should be optional
-		my ($ptr,$ptr2,$vmpath,$vmport,$vmsize,$vmmonport) = pb_conf_get("vmtype","vmcmd","vmpath","vmport","vmsize","vmmonport");
+		my ($ptr,$ptr2,$vmpath,$vmport,$vms,$vmmonport) = pb_conf_get("vmtype","vmcmd","vmpath","vmport","vmsize","vmmonport");
 		my ($vmopt,$vmmem,$vmtmout,$vmsnap,$vmbuildtm) = pb_conf_get_if("vmopt","vmmem","vmtmout","vmsnap","vmbuildtm");
+		my $vmsize = pb_distro_get_param($pbos,$vms);
 
 		my $vmtype = $ptr->{$ENV{'PBPROJ'}};
 		my $vmcmd = $ptr2->{$ENV{'PBPROJ'}};
@@ -2176,7 +2181,7 @@ sub pb_launchv {
 				die("Found an existing Virtual machine $vmm. Won't overwrite") if (-r $vmm);
 				if (($vmtype eq "qemu") || ($vmtype eq "xen") || ($vmtype eq "kvm")) {
 					my $command = pb_check_req("qemu-img",0);
-					pb_system("$command create -f qcow2 $vmm $vmsize->{$v}","Creating the QEMU VM");
+					pb_system("$command create -f qcow2 $vmm $vmsize","Creating the QEMU VM");
 				} elsif ($vmtype eq "vmware") {
 				} else {
 				}
@@ -2772,10 +2777,10 @@ EOF
 	my $nport;
 	my $vmhost;
 
-	if ($vtype =~ /(v|r)m/) {
-		# Prepare the key to be used and transfered remotely
-		$keyfile = pb_ssh_get(1);
+	# Prepare the key to be used and transfered remotely
+	$keyfile = pb_ssh_get(1);
 		
+	if ($vtype =~ /(v|r)m/) {
 		my ($vmport);
 		($vmhost,$vmport) = pb_conf_get($vtype."host",$vtype."port");
 		$nport = pb_get_port($vmport,$pbos,$vtype);
@@ -2857,6 +2862,7 @@ if ( \$found == 0 ) {
 	}
 EOF
 	# TODO: Level of portability of these cmds ? Critical now for RM
+	# TODO: Check existence before adding to avoid errors
 	print SCRIPT << "EOF";
 pb_system("/usr/sbin/groupadd $pbac->{$ENV{'PBPROJ'}}","Adding group $pbac->{$ENV{'PBPROJ'}}");
 pb_system("/usr/sbin/useradd -g $pbac->{$ENV{'PBPROJ'}} -m -d $home/$pbac->{$ENV{'PBPROJ'}} $pbac->{$ENV{'PBPROJ'}}","Adding user $pbac->{$ENV{'PBPROJ'}} (group $pbac->{$ENV{'PBPROJ'}} - home $home/$pbac->{$ENV{'PBPROJ'}})");
@@ -3267,7 +3273,7 @@ sub pb_announce {
 		}
 
 		# TODO: use virtual/real names here now
-		$findstr .= "-name \'$pbpkg-$pbver-$pbtag\.*.rpm\' -o -name \'$pbpkg"."_$pbver*\.deb\' -o -name \'$pbpkg-$pbver*\.ebuild\' ";
+		$findstr .= "-name \'$pbpkg-$pbver-$pbtag\.*.rpm\' -o -name \'$pbpkg"."_$pbver*\.deb\' -o -name \'$pbpkg-$pbver*\.ebuild\' -o -name \'$pbpkg-$pbver*\.pkg\' -o -name \'$pbpkg-$pbver*\.sd\'";
 
 		my $chglog;
 
@@ -3287,6 +3293,8 @@ sub pb_announce {
 		$pb->{'packager'} = $pbpackager;
 		$pb->{'proj'} = $ENV{'PBPROJ'};
 		$pb->{'repo'} = $pbrepo;
+		$pb->{'pbos'}->{'type'} = "announce";
+		$pb->{'pbos'}->{'suffix'} = "none";
 		pb_changelog($pb,\*OUT,"yes");
 		close(OUT);
 		push(@files,"$ENV{'PBTMP'}/$pbpkg.ann");
@@ -3710,8 +3718,8 @@ if ($cmt =~ /^RM/i) {
 pb_log(2,"pb_get_port with $nport\n");
 # Maybe a port was given as parameter so overwrite
 $nport = "$pbport" if (defined $pbport);
-# Maybe in // mode so use the env var set up as an offset to the base port, except when called from send2target for Packages
-if ($cmt ne "Packages") {
+# Maybe in // mode so use the env var set up as an offset to the base port, except when called from send2target for Packages or for RM
+if (($cmt ne "Packages") || ($cmt =~ /^RM/i)) {
 	$nport += $ENV{'PBVMPORT'} if ((defined $pbparallel) && (defined $ENV{'PBVMPORT'}));
 }
 pb_log(2,"pb_get_port returns $nport\n");
