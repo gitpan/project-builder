@@ -112,6 +112,11 @@ if (! -f $ENV{'PBETC'}) {
 # Overwrite generic setup
 #vmport pb = 2223
 #vmport example = 2224
+
+# Info on who is packaging
+#pbpackager default = William Porte <bill\@porte.org>
+#pbpassphrase default = TheScretePassPhrase
+#pbpassfile default = /home/williamporte/secret/passfile
 EOF
 	}
 

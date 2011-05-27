@@ -1,11 +1,70 @@
+2011-05-25  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1305] Creation of
+	  svn+ssh://svn.project-builder.org/prj/svn/pb///0.11.3 from
+	  svn+ssh://svn.project-builder.org/prj/svn/pb//devel
+
+2011-05-18  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1302] devel/svk-commitnUF8h.tmp
+
+2011-04-15  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1298] - Mondorescue announces
+	  - allow verbosity transfer to repo creation script
+
+2011-04-13  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1295] Avoids error msgs in announce due to find issues
+
+2011-03-30  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1289] r4372@localhost: bruno | 2011-03-31 00:00:50 +0200
+	  - By default enable gpg for repo build zith pb, now that package
+	  signature is working
+	  - Removes a remaining warning for debarch usage
+	* [r1287]
+
+2011-03-29  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1285] - Fix #96 completely by using the realpkgname and sorting
+	  the results
+
+2011-03-25  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1283] - Fix an initialization pb for debarch
+	* [r1282] - Fix partially #96. Still needs to deal with pkg name vs
+	  real pkg names
+	* [r1281] - Fix #94 by modifying wrong test condition in
+	  pb_get_port
+	* [r1280] - Attempt to fix #97 by delivering in PBBUILDIR instead
+	  of non-existent dirs below
+	* [r1279] - Adds delivery of the public key to each repository
+	  ateach delivery
+	  - Fix debian repo build
+	  - Adds suport for .deb package signing
+
+2011-03-24  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1278] r4314@localhost: bruno | 2011-03-24 22:18:22 +0100
+	  - Adds RPM signature support and doc
+
+2011-03-22  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1276] - Adds support for different sha algorithms for
+	  createrepo call, due to some distro with python 2.4 not
+	  supporting sha256.
+
+2011-03-21  Bruno Cornec <bruno@project-builder.org>
+
+	* [r1275] - Fix a bug in debian/ubuntu repo creation for amd64
+	  (used x86_64 instead)
+
 2011-03-12  Bruno Cornec <bruno@project-builder.org>
 
-	* [r1268] bin/pb: - Fix #94 RM parallel building doesn't comply
-	  with user defined settings
+	* [r1268] - Fix #94 RM parallel building doesn't comply with user
+	  defined settings
 	  - 0.11.2 is not under the test dir !!!
-	* [r1265] Creation of
-	  svn+ssh://svn.project-builder.org/prj/svn/pb///0.11.2 from
-	  svn+ssh://svn.project-builder.org/prj/svn/pb//devel
 	* [r1262] - Fix doc generation for pb.conf.pod
 	* [r1261] - Fix #82 Undescriptive error message for missing pbcl
 	  file

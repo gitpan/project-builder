@@ -843,30 +843,8 @@ sub pb_cms2build {
 		# We want to at least build for the underlying distro
 		# except if a target was given, in which case we only build for it
 		my $pbos = pb_distro_get_context($pbtarget);
-		my $tmpl = "$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'},";
+		my $tmpl = pb_get_distros($pbos,$pbtarget);
 
-		# Get list of distributions for which we need to generate build files if no target
-		if (not defined ($pbtarget)) {
-			my @pt = pb_conf_get_if("vmlist","velist","rmlist");
-			if (defined $pt[0]->{$ENV{'PBPROJ'}}) {
-				$tmpl .= $pt[0]->{$ENV{'PBPROJ'}};
-			}
-			if (defined $pt[1]->{$ENV{'PBPROJ'}}) {
-				# The 2 lists needs to be grouped with a ',' separating them
-				if ($tmpl ne "") {
-					$tmpl .= ",";
-				}
-				$tmpl .= $pt[1]->{$ENV{'PBPROJ'}} 
-			}
-			if (defined $pt[2]->{$ENV{'PBPROJ'}}) {
-				# The lists needs to be grouped with a ',' separating them
-				if ($tmpl ne "") {
-					$tmpl .= ",";
-				}
-				$tmpl .= $pt[2]->{$ENV{'PBPROJ'}} 
-			}
-		}
-	
 		# Setup $pb structure to allow filtering later on, on files using that structure
 		$pb->{'tag'} = $pbtag;
 		$pb->{'rev'} = $pbrev;
@@ -1367,10 +1345,10 @@ sub pb_build2pkg {
 			pb_system("tar xfz $src","Extracting sources under $ENV{'PBBUILDDIR'}");
 			pb_system("tar xfz $src2","Extracting pbconf under $ENV{'PBBUILDDIR'}");
 			# We need to handle potential patches to upstream sources
-			pb_extract_build_files($src2,"$pbpkg-$pbver/pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbpatch/","$ENV{'PBBUILDDIR'}/SOURCES","patch");
+			pb_extract_build_files($src2,"$pbpkg-$pbver/pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbpatch/","$ENV{'PBBUILDDIR'}","patch");
 
 			# We need to handle potential additional sources to upstream sources
-			pb_extract_build_files($src2,"$pbpkg-$pbver/pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbsrc/","$ENV{'PBBUILDDIR'}/SOURCES","src");
+			pb_extract_build_files($src2,"$pbpkg-$pbver/pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbsrc/","$ENV{'PBBUILDDIR'}","src");
 
 			chdir "$pbpkg-$pbver" || die "Unable to chdir to $pbpkg-$pbver";
 			if (-f "pbconf/$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'}/pbbuild") {
@@ -1414,7 +1392,7 @@ sub pb_build2pkg {
 				my $tmp = $_;
 				next if ($tmp !~ /^SD BUILD.*:/);
 				$tmp =~ s|.*../(.*)_(.*).sd.*|$1|;
-				$made="$made $tmp"."_*.sd";
+				$made = "$made $tmp"."_*.sd";
 			}
 			close(LOG);
 			$made="$made $pbpkg-$pbver-$pbtag.sd";
@@ -1438,6 +1416,9 @@ sub pb_build2pkg {
 		}
 		pb_rm_rf($tmpd);
 	}
+
+	# Sign packages
+	pb_sign_pkgs($pbos,$made);
 
 	# Find the appropriate check cmd/opts
 	my ($chkcmd,$chkopt) = pb_distro_get_param($pbos,pb_conf_get_if("oschkcmd","oschkopt"));
@@ -1606,7 +1587,16 @@ sub pb_send2target {
 		$src = <KEEP>;
 		chomp($src);
 		close(KEEP);
-		$src="$src $ENV{'PBBUILDDIR'}/pbscript.$$";
+		$src = "$src $ENV{'PBBUILDDIR'}/pbscript.$$";
+	}
+	if (($cmt eq "Sources") || ($cmt eq "Packages")) {
+		my ($pbpackager) = pb_conf_get("pbpackager");
+		$ENV{'PBPACKAGER'} = $pbpackager->{$ENV{'PBPROJ'}};
+		pb_log(0,"Exporting public key for $ENV{'PBPACKAGER'}\n");
+		# Using pb_system is not working due to redirection below
+		system("gpg --export -a \'$ENV{'PBPACKAGER'}\' > $ENV{'PBDESTDIR'}/$ENV{'PBPROJ'}.pubkey");
+		chmod 0644,"$ENV{'PBDESTDIR'}/$ENV{'PBPROJ'}.pubkey";
+		$src = "$src $ENV{'PBDESTDIR'}/$ENV{'PBPROJ'}.pubkey";
 	}
 	# Remove potential leading spaces (cause problem with basename)
 	$src =~ s/^ *//;
@@ -1683,16 +1673,20 @@ sub pb_send2target {
 		# Repository management
 		open(PBS,"> $ENV{'PBBUILDDIR'}/pbscript.$$") || die "Unable to create $ENV{'PBBUILDDIR'}/pbscript.$$";
 		if ($pbos->{'type'} eq "rpm") {
+			my $pbsha = pb_distro_get_param($pbos,pb_conf_get("ossha"));
 			# Also make a pbscript to generate yum/urpmi bases
 			print PBS << "EOF";
 #!/bin/bash
 # Prepare a script to ease yum setup
+EOF
+			print PBS "set -x\n" if ($pbdebug gt 1);
+			print PBS << "EOF";
 cat > $ENV{'PBPROJ'}.repo << EOT
 [$ENV{'PBPROJ'}]
 name=$pbos->{'name'} $pbos->{'version'} $pbos->{'arch'} - $ENV{'PBPROJ'} Vanilla Packages
 baseurl=$pbrepo->{$ENV{'PBPROJ'}}/$repodir
 enabled=1
-gpgcheck=0
+gpgcheck=1
 EOT
 chmod 644 $ENV{'PBPROJ'}.repo
 
@@ -1703,7 +1697,7 @@ if [ -x /usr/bin/yum-arch ]; then
 	yum-arch .
 fi
 # Create repodata
-createrepo .
+createrepo -s $pbsha .
 EOF
 			if ($pbos->{'family'} eq "md") {
 				# For Mandriva add urpmi management
@@ -1787,6 +1781,8 @@ EOF
 			# Also make a pbscript to generate apt bases
 			# Cf: http://www.debian.org/doc/manuals/repository-howto/repository-howto.fr.html
 			# This dirname removes ver
+			my $debarch = $pbos->{'arch'};
+			$debarch = "amd64" if ($pbos->{'arch'} eq "x86_64");
 			my $rpd = dirname("$pbrepo->{$ENV{'PBPROJ'}}/$repodir");
 			print PBS << "EOF";
 #!/bin/bash
@@ -1799,7 +1795,7 @@ chmod 644 $ENV{'PBPROJ'}.sources.list
 
 # Up two levels to deal with the dist dir cross versions
 cd ..
-mkdir -p dists/$pbos->{'version'}/contrib/binary-$pbos->{'arch'} dists/$pbos->{'version'}/contrib/source
+mkdir -p dists/$pbos->{'version'}/contrib/binary-$debarch dists/$pbos->{'version'}/contrib/source
 
 # Prepare a script to create apt info file
 # Reuse twice after
@@ -1812,14 +1808,14 @@ Origin: $ENV{'PBPROJ'}
 Label: $ENV{'PBPROJ'} dev repository $pbrepo->{$ENV{'PBPROJ'}}
 EOT
 
-echo "Creating Packages metadata ($pbos->{'arch'})"
-dpkg-scanpackages -a$pbos->{'arch'} $pbos->{'version'} /dev/null | gzip -c9 > dists/$pbos->{'version'}/contrib/binary-$pbos->{'arch'}/Packages.gz
-dpkg-scanpackages -a$pbos->{'arch'} $pbos->{'version'} /dev/null | bzip2 -c9 > dists/$pbos->{'version'}/contrib/binary-$pbos->{'arch'}/Packages.bz2
+echo "Creating Packages metadata ($pbos->{'arch'} aka $debarch)"
+dpkg-scanpackages -a$debarch $pbos->{'version'} /dev/null | gzip -c9 > dists/$pbos->{'version'}/contrib/binary-$debarch/Packages.gz
+dpkg-scanpackages -a$debarch $pbos->{'version'} /dev/null | bzip2 -c9 > dists/$pbos->{'version'}/contrib/binary-$debarch/Packages.bz2
 echo "Creating Contents metadata"
 apt-ftparchive contents $pbos->{'version'} | gzip -c9 > dists/$pbos->{'version'}/Contents.gz
-echo "Creating Release metadata ($pbos->{'arch'})"
-cat \$TMPD/Release > dists/$pbos->{'version'}/contrib/binary-$pbos->{'arch'}/Release
-echo "Architecture: $pbos->{'arch'}" >> dists/$pbos->{'version'}/contrib/binary-$pbos->{'arch'}/Release
+echo "Creating Release metadata ($pbos->{'arch'} aka $debarch)"
+cat \$TMPD/Release > dists/$pbos->{'version'}/contrib/binary-$debarch/Release
+echo "Architecture: $debarch" >> dists/$pbos->{'version'}/contrib/binary-$debarch/Release
 echo "Creating Source metadata"
 dpkg-scansources $pbos->{'version'} /dev/null | gzip -c9 > dists/$pbos->{'version'}/contrib/source/Sources.gz
 cat \$TMPD/Release > dists/$pbos->{'version'}/contrib/source/Release
@@ -1960,13 +1956,7 @@ EOF
 			pb_system("$shcmd \"rm -rf $tdir $bdir\"","$cmt cleanup");
 
 			# Sign packages locally
-			if ($pbos->{'type'} eq "rpm") {
-				#pb_system("rpm --addsign --define \"_signature gpg\" --define \"_gpg_name $ENV{'PBPACKAGER'}\" --define \"__gpg_sign_cmd /usr/bin/gpg --batch --no-verbose --no-armor --no-tty --no-secmem-warning -sbo %{__signature_filename} %{__plaintext_filename} --use-agent\" $made","Signing RPM packages packages");
-			} elsif ($pbos->{'type'} eq "deb") {
-				#pb_system("debsign $made","Signing DEB packages");
-			} else {
-				pb_log(0,"I don't know yet how to sign packages for type $pbos->{'type'}.\nPlease give feedback to dev team\n");
-			}
+			pb_sign_pkgs($pbos,$made);
 
 			# We want to send them to the ssh account so overwrite what has been done before
 			undef $pbaccount;
@@ -3245,14 +3235,23 @@ sub pb_announce {
 
 	# Get all required parameters
 	my ($pbpackager,$pbrepo,$pbml,$pbsmtp) = pb_conf_get("pbpackager","pbrepo","pbml","pbsmtp");
-	my ($pkgv, $pkgt, $testver) = pb_conf_get_if("pkgver","pkgtag","testver");
+	my ($pkgv, $pkgt) = pb_conf_get_if("pkgver","pkgtag");
 	my $pkg = pb_cms_get_pkg($defpkgdir,$extpkgdir);
 	my @pkgs = @$pkg;
 	my %pkgs;
 	my $first = 0;
 
+	# Get all distros concerned
+	my $pbos = pb_distro_get_context();
+	my $distrolist = pb_get_distros($pbos,undef);
+	my %dl;
+	foreach my $d (split(/,/,$distrolist)) {
+		my ($d1,$d2, $d3) = split(/-/,$d);
+		$dl{$d1}++;
+	}
+
 	# Command to find packages on repo
-	my $findstr = "find . ";
+	my $findstr = "find ".join(" ",keys %dl)." ";
 	# Generated announce files
 	my @files;
 
@@ -3273,7 +3272,10 @@ sub pb_announce {
 		}
 
 		# TODO: use virtual/real names here now
-		$findstr .= "-name \'$pbpkg-$pbver-$pbtag\.*.rpm\' -o -name \'$pbpkg"."_$pbver*\.deb\' -o -name \'$pbpkg-$pbver*\.ebuild\' -o -name \'$pbpkg-$pbver*\.pkg\' -o -name \'$pbpkg-$pbver*\.sd\'";
+		my $pbrealpkg = $pbpkg;
+		my $pbrealpkgrpm = pb_cms_get_real_pkg($pbpkg,"rpm");
+		my $pbrealpkgdeb = pb_cms_get_real_pkg($pbpkg,"deb");
+		$findstr .= "-name \'$pbrealpkgrpm-$pbver-$pbtag\.*.rpm\' -o -name \'$pbrealpkgdeb"."_$pbver*\.deb\' -o -name \'$pbrealpkg-$pbver*\.ebuild\' -o -name \'$pbrealpkg-$pbver*\.pkg\' -o -name \'$pbrealpkg-$pbver*\.sd\' ";
 
 		my $chglog;
 
@@ -3285,7 +3287,7 @@ sub pb_announce {
 
 		open(OUT,"> $ENV{'PBTMP'}/$pbpkg.ann") || die "Unable to create $ENV{'PBTMP'}/$pbpkg.ann: $!";
 		my $pb;
-		$pb->{'realpkg'} = $pbpkg;
+		$pb->{'realpkg'} = $pbrealpkg;
 		$pb->{'ver'} = $pbver;
 		$pb->{'tag'} = $pbtag;
 		$pb->{'date'} = $pbdate;
@@ -3303,7 +3305,8 @@ sub pb_announce {
 
 	# Prepare the command to run and execute it
 	open(PBS,"> $ENV{'PBTMP'}/pbscript") || die "Unable to create $ENV{'PBTMP'}/pbscript";
-	print PBS "$findstr\n";
+	print PBS "set -x\n" if ($pbdebug gt 1);
+	print PBS "$findstr | sort 2> /dev/null\n";
 	close(PBS);
 	chmod 0755,"$ENV{'PBTMP'}/pbscript";
 	pb_send2target("Announce");
@@ -3719,7 +3722,7 @@ pb_log(2,"pb_get_port with $nport\n");
 # Maybe a port was given as parameter so overwrite
 $nport = "$pbport" if (defined $pbport);
 # Maybe in // mode so use the env var set up as an offset to the base port, except when called from send2target for Packages or for RM
-if (($cmt ne "Packages") || ($cmt =~ /^RM/i)) {
+if (($cmt ne "Packages") && ($cmt !~ /^RM/i)) {
 	$nport += $ENV{'PBVMPORT'} if ((defined $pbparallel) && (defined $ENV{'PBVMPORT'}));
 }
 pb_log(2,"pb_get_port returns $nport\n");
@@ -3795,5 +3798,86 @@ pb_log(2,"pb_get_sudocmds returns ".Dumper(keys %sudocmds)."\n");
 return(keys %sudocmds);
 }
 
+sub pb_sign_pkgs {
+
+my $pbos = shift;
+my $made = shift;
+
+pb_log(2,"entering pb_sign_pkg: $made ".Dumper($pbos)."\n");
+my ($passfile, $passphrase, $passpath) = pb_conf_get_if("pbpassfile","pbpassphrase","pbpasspath");
+$ENV{'PBPASSPHRASE'} = $passphrase->{$ENV{'PBPROJ'}} if ((not defined $ENV{'PBPASSPHRASE'}) && (defined $passphrase->{$ENV{'PBPROJ'}}));
+$ENV{'PBPASSFILE'} = $passfile->{$ENV{'PBPROJ'}} if ((not defined $ENV{'PBPASSFILE'})&& (defined $passfile->{$ENV{'PBPROJ'}})) ;
+$ENV{'PBPASSPATH'} = $passpath->{$ENV{'PBPROJ'}} if ((not defined $ENV{'PBPASSPATH'})&& (defined $passpath->{$ENV{'PBPROJ'}})) ;
+
+# Remove extra spaces
+$made =~ s/\s+/ /g;
+$made =~ s/^\s//g;
+$made =~ s/\s$//g;
+
+if ($pbos->{'type'} eq "rpm") {
+	eval
+	{
+		require RPM4::Sign;
+		RPM4::Sign->import();
+	};
+	if ($@) {
+		# RPM4::Sign not found
+		pb_log(1,"WARNING: Install RPM4::Sign to benefit from automatic package signing.\n");
+	} else {
+		return if ((not defined $ENV{'PBPASSPHRASE'}) and (not defined $ENV{'PBPASSFILE'}));
+		my $sign = RPM4::Sign->new(
+   			passphrase => $ENV{'PBPASSPHRASE'},
+   			name => $ENV{'PBPACKAGER'},
+			path => $ENV{'PBPASSPATH'},
+   			password_file => $ENV{'PBPASSFILE'}, 
+		);
+
+		pb_log(0,"Signing RPM packages...\n");
+		pb_log(2,"pb_sign_pkg: pkgs:".Dumper(split(/ /,$made))."\n");
+		$sign->rpmssign(split(/ /,$made));
+	}
+} elsif ($pbos->{'type'} eq "deb") {
+	my $changes = "";
+	foreach my $c (split(/ /,$made)) {
+		$changes .= " $ENV{'PBBUILDDIR'}/$c" if ($c =~ /\.changes$/);
+	}
+	pb_system("debsign -m\'$ENV{'PBPACKAGER'}\' $changes","Signing DEB packages");
+} else {
+	pb_log(0,"I don't know yet how to sign packages for type $pbos->{'type'}.\nPlease give feedback to dev team\n");
+}
+pb_log(2,"exiting pb_sign_pkg\n");
+}
+
+# return list of all distributins supported, coma separated
+sub pb_get_distros {
+
+my $pbos = shift;
+my $pbtarget = shift;
+
+my $tmpl = "$pbos->{'name'}-$pbos->{'version'}-$pbos->{'arch'},";
+
+# Get list of distributions for which we need to generate build files if no target
+if (not defined ($pbtarget)) {
+	my @pt = pb_conf_get_if("vmlist","velist","rmlist");
+	if (defined $pt[0]->{$ENV{'PBPROJ'}}) {
+		$tmpl .= $pt[0]->{$ENV{'PBPROJ'}};
+	}
+	if (defined $pt[1]->{$ENV{'PBPROJ'}}) {
+		# The 2 lists needs to be grouped with a ',' separating them
+		if ($tmpl ne "") {
+			$tmpl .= ",";
+		}
+		$tmpl .= $pt[1]->{$ENV{'PBPROJ'}} 
+	}
+	if (defined $pt[2]->{$ENV{'PBPROJ'}}) {
+		# The lists needs to be grouped with a ',' separating them
+		if ($tmpl ne "") {
+			$tmpl .= ",";
+		}
+	$tmpl .= $pt[2]->{$ENV{'PBPROJ'}} 
+	}
+}
+return($tmpl);
+}	
 
 1;

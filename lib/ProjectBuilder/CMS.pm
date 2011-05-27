@@ -487,7 +487,7 @@ my $scheme = shift;
 my $dir = shift;
 my $vcscmd = pb_cms_cmd($scheme);
 
-if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
+if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
 	pb_system("$vcscmd up $dir","Updating $dir ");
 } elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
@@ -514,7 +514,7 @@ my $ver = basename($dir);
 my $msg = "updated to $ver";
 $msg = "Project $ENV{PBPROJ} creation" if (defined $pbinit);
 
-if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
+if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
 	pb_system("cd $dir ; $vcscmd ci -m \"$msg\" .","Checking in $dir ");
 } elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
@@ -536,7 +536,7 @@ my $scheme = shift;
 my $f = shift;
 my $vcscmd = pb_cms_cmd($scheme);
 
-if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
+if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
 	pb_system("$vcscmd add $f","Adding $f to VCS ");
 } elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
 } else {
@@ -559,7 +559,7 @@ my $dir =shift;
 my $vcscmd = pb_cms_cmd($scheme);
 my $l = undef;
 
-if (($scheme =~ /^svn/) || ($scheme =~ /^svk/) || ($scheme =~ /^hg/) || ($scheme =~ /^git/) || ($scheme =~ /^cvs/)) {
+if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
 	open(PIPE,"$vcscmd diff $dir |") || die "Unable to get $vcscmd diff from $dir";
 	$l = 0;
 	while (<PIPE>) {
@@ -714,7 +714,10 @@ if (($scheme !~ /^cvs/) && ($scheme !~ /^svn/) && ($scheme !~ /^svk/) && ($schem
 	# For svk, scheme doesn't appear in svk info so remove it here in uri coming from conf file 
 	# which needs it to trigger correct behaviour
 	$uri =~ s/^svk://;
-	if ($cmsurl ne $uri) {
+	if (($scheme2 =~ /^git/) || ($scheme2 =~ /^hg/)) {
+		# These VCS manages branches internally not with different tree structures
+		# Assuming it's correct for now.
+	} elsif ($cmsurl ne $uri) {
 		# The local content doesn't correpond to the repository
 		pb_log(0,"ERROR: Inconsistency detected:\n");
 		pb_log(0,"       * $ENV{$envar} ($envar) refers to $cmsurl but\n");

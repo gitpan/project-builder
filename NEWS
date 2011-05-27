@@ -2,6 +2,21 @@
 
 PB CHANGES
 
+0.11.3 (2011-05-25)
+- Avoid the structure check for git/hg for now as the way it's currently done is only valid for SVN and the likes (Bruno Cornec)
+- allow verbosity transfer to repo creation script (Bruno Cornec)
+- Avoids error msgs in announce due to find issues (Bruno Cornec)
+- By default enable gpg for repo built with pb, now that package signature is working (Bruno Cornec)
+- Fix #96 completely by using the realpkgname and sorting the results (Bruno Cornec)
+- Fix #94 by modifying wrong test condition in pb_get_port (Bruno Cornec)
+- Fix #97 by delivering in PBBUILDIR instead of non-existent dirs below (Bruno Cornec)
+- Adds delivery of the public key to each repository at each delivery (Bruno Cornec)
+- Adds suport for .deb package signing (Bruno Cornec)
+- Fix debian repo build  (Bruno Cornec)
+- Adds RPM signature support and doc (Bruno Cornec)
+- Adds support for different sha algorithms for createrepo call, due to some distro with python 2.4 not supporting sha256. (Bruno Cornec)
+- Fix a bug in debian/ubuntu repo creation for amd64 (used x86_64 instead) (Bruno Cornec)
+
 0.11.2 (2011-03-12)
 - Fix #82 Undescriptive error message for missing pbcl file (Bruno Cornec)
 - Fix #90 - cms2webssh broken (Bruno Cornec)
