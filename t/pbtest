@@ -1,0 +1,367 @@
+#!/bin/bash
+#
+# Project Builder test suite
+#
+# $Id$
+#
+# Copyright B. Cornec 2007-2012
+# Provided under the GPL v2
+
+# First create a dummy account for testing
+# In order for this script to run well, you should have sudo access
+
+# You may have multiple distros here
+TESTVEDIST="debian-6.0-x86_64 ubuntu-12.04-i386 fedora-16-x86_64 opensuse-12.1-x86_64 mageia-2-i386 mandriva-2010.1-i386"
+# Only one VM is tested for now.
+TESTVMDIST="fedora-16-i386"
+TESTVMISO="/users/bruno/iso/Fedora-16-i386-DVD.iso"
+PBUSER=pbtest
+PBTEST="/home/$PBUSER"
+export PBPROJ=afio
+
+# Sub function to handle execution as pbtest 
+# doesn't change to the home dir of the user as su - can't be used to get env var correct
+sudopbtest() {
+
+cmd=$1
+msg=$2
+
+echo " "
+if [ _"$cmd" == _"/tmp/pbtestcmd" ]; then
+	echo "INFO (as $PBUSER): Now running `head -1 $cmd` [$msg]"
+else
+	echo "INFO (as $PBUSER): Now running $cmd [$msg]"
+fi
+sudo -n -E su - $PBUSER -c "$cmd"
+ret=$?
+if [ $ret -ne 0 ] && [ _"$msg" == _"" ]; then
+	echo "================================"
+	echo "ERROR: Command $cmd failed: $ret"
+	echo "================================"
+fi
+return $ret
+}
+
+sudocmd() {
+cmd=$1
+
+echo " "
+echo "INFO (as root): Now running $cmd"
+sudo -n $cmd
+ret=$?
+if [ $ret -ne 0 ]; then
+	echo "================================"
+	echo "ERROR: Command $cmd failed: $ret"
+	echo "================================"
+fi
+return $ret
+}
+
+
+for d in $TESTVEDIST; do
+	# umount /proc in VE in case
+	dd=`echo $d | cut -d'-' -f1`
+	vv=`echo $d | cut -d'-' -f2`
+	aa=`echo $d | cut -d'-' -f3`
+	if [ -f "$PBTEST/ve/$dd/$vv/$aa/proc/cpuinfo" ]; then
+		sudocmd "umount $PBTEST/ve/$dd/$vv/$aa/proc"
+	fi
+done
+sudocmd "rm -rf $PBTEST/* $PBTEST/.??*"
+sudocmd "rmdir $PBTEST"
+sudocmd "killall -u $PBUSER"
+sudocmd "userdel $PBUSER"
+#sudocmd "groupdel $PBUSER" 1
+sudocmd "useradd $PBUSER"
+sudocmd "grep -q $PBUSER /etc/sudoers"
+if [ $? -ne 0 ]; then
+	cat > /tmp/sudoers << EOF
+Defaults env_keep += "PBPROJ"
+# This is for the $PBUSER account for the VE and VM only
+$PBUSER ALL=NOPASSWD:/usr/sbin/chroot
+$PBUSER ALL=NOPASSWD:/usr/bin/rpmbootstrap
+$PBUSER ALL=NOPASSWD:/usr/sbin/debootstrap
+$PBUSER ALL=NOPASSWD:/bin/chmod
+$PBUSER ALL=NOPASSWD:/bin/cp
+$PBUSER ALL=NOPASSWD:/bin/rm
+$PBUSER ALL=NOPASSWD:/bin/tar
+$PBUSER ALL=NOPASSWD:/bin/mkdir
+$PBUSER ALL=NOPASSWD:/usr/bin/qemu-kvm
+EOF
+	sudocmd "cat /etc/sudoers /tmp/sudoers" | grep -v "INFO " > /tmp/sudoers2
+	sudocmd "chmod 440 /tmp/sudoers2"
+	sudocmd "chown root:root /tmp/sudoers2"
+	sudocmd "mv /tmp/sudoers2 /etc/sudoers"
+	rm -f /tmp/sudoers /tmp/sudoers2
+fi
+# Force $PBUSER (for now pbuser hardcoded!) account passwd is $PBUSER
+sudocmd "perl -pi -e 's|^pbtest:.*|pbtest:$2a$08$2Q.tEty4v/fU0RyPeDelk.AjLAtXUXU3DpSs/l/8YrFmau1LJRCqC:15483:0:99999:7:::|' /etc/shadow"
+sudopbtest "echo export PBPROJ=$PBPROJ >> $PBTEST/.bash_profile"
+sudopbtest "env | grep PBPROJ"
+
+#Taken from Lab document originally
+# SVN repo setup
+sudopbtest "svnadmin create $PBTEST/svn"
+cat > /tmp/authz << EOF
+[/]
+$PBUSER = rw
+* = r
+EOF
+sudocmd "mv /tmp/authz $PBTEST/svn/conf/authz"
+cat > /tmp/passwd << EOF
+[users]
+$PBUSER = $PBUSER
+EOF
+sudocmd "mv /tmp/passwd $PBTEST/svn/conf/passwd"
+cat > /tmp/svnserve.conf << EOF
+[general]
+password-db = $PBTEST/svn/conf/passwd
+authz-db = authz
+anon-access = read
+auth-access = write
+realm = pb
+EOF
+sudocmd "mv /tmp/svnserve.conf $PBTEST/svn/conf/svnserve.conf"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/svn/conf/authz $PBTEST/svn/conf/passwd $PBTEST/svn/conf/svnserve.conf"
+sudopbtest "killall svnserve" 1
+sudopbtest "svnserve -d -r $PBTEST/svn"
+sudopbtest "mkdir -p $PBTEST/{ftp,ve,vm,.ssh,pb}"
+sudopbtest "chmod 700 $PBTEST/.ssh"
+
+sudopbtest "pb -h"
+sudopbtest "pbdistrocheck"
+sudopbtest "pb clean 2>&1 > /dev/null" 1
+
+cat > /tmp/.pbrc << EOF
+# Projects
+pbconfurl afio = svn://localhost/pb/afio/pbconf
+pbdefdir default = \$ENV{'HOME'}/pb
+pbconfurl pb = svn://svn.project-builder.org/pb/pbconf
+pbconfdir pb = \$ENV{'HOME'}/pb/pbconf
+pburl pb = svn://svn.project-builder.org/pb
+pburl mondorescue = svn://svn.mondorescue.org/mondorescue/branches
+sshhost pb = localhost
+sshlogin pb = $PBUSER
+sshdir pb = \$ENV{'HOME'}/ftp
+#
+pbpackager default = Big Chief <bigchief@hp.com>
+vmport pb = 2200
+pbparallel pb = 6
+vepath default = $PBTEST/ve
+vmpath default = $PBTEST/vm
+EOF
+sudocmd "mv /tmp/.pbrc $PBTEST/.pbrc"
+
+cat > /tmp/.pbrc << EOF
+vmtype default = kvm
+vmcmd default = qemu-kvm
+vmsize fedora = 10G
+vmmonport default = 4000
+vmlogin default = $PBUSER
+EOF
+echo "vmlist default = `echo $TESTVMDIST | sed 's/ /,/g'`" >> /tmp/.pbrc
+sudocmd "mv /tmp/.pbrc $PBTEST/vm/.pbrc"
+
+cat > /tmp/.pbrc << EOF
+vetype default = chroot
+verpmtype default = rpmbootstrap
+vedebtype default = debootstrap
+verebuild default = false
+veopt default = 
+vesnap default = false
+velogin default = $PBUSER
+EOF
+echo "velist default = `echo $TESTVEDIST | sed 's/ /,/g'`" >> /tmp/.pbrc
+sudocmd "mv /tmp/.pbrc $PBTEST/ve/.pbrc"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/.pbrc $PBTEST/ve/.pbrc $PBTEST/vm/.pbrc"
+
+sudopbtest "ssh-keygen -f $PBTEST/.ssh/id_rsa -t rsa -b 768 -v -N ''"
+sudopbtest "cp $PBTEST/.ssh/id_rsa.pub $PBTEST/.ssh/authorized_keys"
+sudopbtest "chmod 600 $PBTEST/.ssh/authorized_keys $PBTEST/.ssh/id_rsa.pub"
+sudopbtest "ssh localhost touch $PBTEST/ftp/README"
+
+# Create SVN conf files - doesn't work fully as it asks for a password - solved with PBVCSOPT
+sudopbtest "svn info 2>&1 > /dev/null" 1
+cat > /tmp/servers << EOF
+[global]
+store-passwords = yes
+store-plaintext-passwords = yes
+store-auth-creds = yes
+EOF
+sudocmd "mv /tmp/servers $PBTEST/.subversion/servers"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/.subversion/servers"
+
+VCSOPT="--username $PBUSER --password $PBUSER"
+
+sudopbtest "svn import $PBTEST/pb svn://localhost/pb -m 'Initial creation of pb repo' $VCSOPT"
+sudopbtest "svn co svn://localhost/pb $PBTEST/pb"
+sudopbtest "touch $PBTEST/pb/README"
+sudopbtest "svn add $PBTEST/pb/README"
+sudopbtest "svn ci $VCSOPT -m 'add readme' $PBTEST/pb/README"
+sudopbtest "PBVCSOPT=\"$VCSOPT\" pb -r 2.5 newproj afio"
+
+grep -vE '^defpkgdir|^projver|^projtag|^pburl|^pbrepo|^shh' $PBTEST/pb/afio/pbconf/2.5/afio.pb > /tmp/afio.pb
+cat >> /tmp/afio.pb << EOF
+defpkgdir afio = dummy
+projver afio = 2.5
+projtag afio = 1
+pburl afio = ftp://ftp.project-builder.org/src/afio-2.5.tar.gz
+pbrepo afio = ftp://ftp.project-builder.org
+sshhost afio = localhost
+sshlogin afio = $PBUSER
+sshdir afio = \$ENV{'HOME'}/ftp
+EOF
+sudocmd "mv /tmp/afio.pb $PBTEST/pb/afio/pbconf/2.5/afio.pb"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/pb/afio/pbconf/2.5/afio.pb"
+cat > /tmp/pbtestcmd << EOF
+perl -pi -e 's|testver\s+afio\s+=\s+true|testver\ afio\ =\ false|' $PBTEST/pb/afio/pbconf/2.5/afio.pb
+EOF
+chmod 755 /tmp/pbtestcmd
+sudopbtest /tmp/pbtestcmd
+
+grep -vE 'PBSRC|PBDESC|PBSUMMARY|PBURL|PBLOG' $PBTEST/pb/afio/pbconf/2.5/pbfilter/all.pbf > /tmp/all.pbf
+cat >> /tmp/all.pbf << EOF
+filter PBSRC = src/%{name}-%{version}.tar.gz
+filter PBDESC = afio is a cpio compatible archiver with extended features$/It can compress on a file by file basis.
+filter PBSUMMARY = afio is a cpio compatible archiver with extended features
+filter PBURL = http://www.boutell.com/lsm/lsmbyid.cgi/000462
+filter PBLOG = no
+EOF
+sudocmd "mv /tmp/all.pbf $PBTEST/pb/afio/pbconf/2.5/pbfilter/all.pbf"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/pb/afio/pbconf/2.5/pbfilter/all.pbf"
+
+grep -vE 'PBGRP|PBLIC' $PBTEST/pb/afio/pbconf/2.5/pbfilter/rpm.pbf > /tmp/rpm.pbf
+cat >> /tmp/rpm.pbf << EOF
+filter PBGRP = Applications/Archiving
+filter PBLIC = Afio
+filter PBBDEP = gcc
+EOF
+sudocmd "mv /tmp/rpm.pbf $PBTEST/pb/afio/pbconf/2.5/pbfilter/rpm.pbf"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/pb/afio/pbconf/2.5/pbfilter/rpm.pbf "
+
+cat > /tmp/deb.pbf << EOF
+filter PBGRP = utils
+filter PBLIC = Afio
+filter PBBDEP = gcc
+EOF
+sudocmd "mv /tmp/deb.pbf $PBTEST/pb/afio/pbconf/2.5/pbfilter/deb.pbf"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/pb/afio/pbconf/2.5/pbfilter/deb.pbf "
+
+# First build
+sudopbtest "pb -r 2.5 sbx2build"
+
+cat > /tmp/pbtestcmd << EOF
+# Filtering $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+perl -pi -e 's|%configure||' $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+perl -pi -e 's|make %{\?_smp_mflags}|make %{\?_smp_mflags}\nchmod 644 script*/*|' $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+perl -pi -e 's|make DESTDIR=.*|mkdir -p %{buildroot}%{_bindir}\nmkdir -p %{buildroot}%{_mandir}/man1\ninstall -p -m 755 afio %{buildroot}%{_bindir}\ninstall -p -m 644 afio.1 %{buildroot}%{_mandir}/man1|' $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+perl -pi -e 's|%doc ChangeLog|%doc HISTORY PORTING README SCRIPTS ANNOUNCE-2.5 perl.artistic.license|' $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+perl -pi -e 's|%doc INSTALL COPYING README AUTHORS NEWS|%doc afio.lsm script1 script2 script3 script4\n%{_bindir}/%{name}\n%{_mandir}/man1/%{name}.1*|' $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+perl -pi -e 's|^#BuildRequires:|BuildRequires:|' $PBTEST/pb/afio/pbconf/2.5/afio/rpm/afio.spec
+EOF
+chmod 755 /tmp/pbtestcmd
+sudopbtest /tmp/pbtestcmd
+
+cat > /tmp/pbcl << EOF
+# $Id$
+
+AFIO CHANGES
+
+2.5 (2009-12-03)
+- First packages created
+EOF
+sudocmd "mv /tmp/pbcl $PBTEST/pb/afio/pbconf/2.5/afio/pbcl"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/pb/afio/pbconf/2.5/afio/pbcl"
+sudopbtest "svn add $PBTEST/pb/afio/pbconf/2.5/afio/pbcl"
+sudopbtest "svn ci -m 'Adding pbcl for afio' $VCSOPT $PBTEST/pb"
+
+sudopbtest "pb sbx2pkg"
+rpm -qilvp $PBTEST/pb/afio/build/RPMS/x86_64/afio-2.5*
+
+cat > /tmp/pbtestcmd << EOF
+# Filtering $PBTEST/pb/afio/pbconf/2.5/afio/deb/control
+perl -pi -e 's|,\s*PBDEP||' $PBTEST/pb/afio/pbconf/2.5/afio/deb/control
+sed -i '/Recommends: PBREC/d' $PBTEST/pb/afio/pbconf/2.5/afio/deb/control
+sed -i '/Suggests: PBSUG/d' $PBTEST/pb/afio/pbconf/2.5/afio/deb/control
+EOF
+chmod 755 /tmp/pbtestcmd
+sudopbtest /tmp/pbtestcmd
+
+cat > /tmp/afio.docs << EOF
+HISTORY
+PORTING
+README
+SCRIPTS
+ANNOUNCE-2.5
+perl.artistic.license
+afio.lsm
+script1
+script2
+script3
+script4
+EOF
+sudocmd "mv /tmp/afio.docs $PBTEST/pb/afio/pbconf/2.5/afio/deb/afio.docs"
+sudocmd "chown ${PBUSER}:$PBUSER $PBTEST/pb/afio/pbconf/2.5/afio/deb/afio.docs "
+
+cat > /tmp/pbtestcmd << EOF
+# Filtering $PBTEST/pb/afio/pbconf/2.5/afio/deb/rules
+perl -pi -e 's|config.status: configure|config.status: Makefile|' $PBTEST/pb/afio/pbconf/2.5/afio/deb/rules
+perl -pi -e 's|dh_installchangelogs ChangeLog|dh_installchangelogs debian/changelog|' $PBTEST/pb/afio/pbconf/2.5/afio/deb/rules
+perl -pi -e 's|# - copy html manual to temporary location for renaming|mkdir -p \\\$(CURDIR)/debian/\\\$(PACKAGE_NAME)/usr/bin \\\$(CURDIR)/debian/\\\$(PACKAGE_NAME)/usr/share/man/man1 ; install -p -m 755 afio \\\$(CURDIR)/debian/\\\$(PACKAGE_NAME)/usr/bin ; install -p -m 644 afio.1 \\\$(CURDIR)/debian/\\\$(PACKAGE_NAME)/usr/share/man/man1|' $PBTEST/pb/afio/pbconf/2.5/afio/deb/rules
+sed -i -e '/\.\/configure /d' $PBTEST/pb/afio/pbconf/2.5/afio/deb/rules
+sed -i -e '/ install prefix=/d' $PBTEST/pb/afio/pbconf/2.5/afio/deb/rules
+EOF
+chmod 755 /tmp/pbtestcmd
+sudopbtest /tmp/pbtestcmd
+
+
+#dpkg -I ~ftp/pub/afio/test/debian/5.0/afio_2.5-0.20091204131057_i386.deb
+#dpkg -x ~ftp/pub/afio/test/debian/5.0/afio_2.5-0.20091204131057_i386.deb /tmp/x ;  ls -lR /tmp/x
+
+sudopbtest "pb getconf"
+# test also with pb
+sudopbtest "pb -p pb -r devel getconf"
+sudopbtest "pb -p pb -r devel sbx2pkg"
+sudopbtest "pb -p pb build2ssh"
+sudopbtest "pb -p pb pkg2ssh"
+
+for d in $TESTVEDIST; do
+	sudopbtest "PATH=${PATH}:/sbin:/usr/sbin pb -p pb -m $d newve"
+	sudopbtest "pb -p pb -m $d sbx2setupve"
+	sudopbtest "pb -p pb -m $d snapve"
+	sudopbtest "pb -m $d sbx2ve"
+	# Cleaning VE to use the snapshot
+	dd=`echo $d | cut -d'-' -f1`
+	vv=`echo $d | cut -d'-' -f2`
+	aa=`echo $d | cut -d'-' -f3`
+	if [ -f "$PBTEST/ve/$dd/$vv/$aa/proc/cpuinfo" ]; then
+		sudocmd "umount $PBTEST/ve/$dd/$vv/$aa/proc"
+	fi
+	sudocmd "rm -rf $PBTEST/ve/$dd/$vv/$aa"
+	sudopbtest "pb -S -m $d sbx2ve"
+done
+
+sudopbtest "svn ci $VCSOPT -m 'sync before newver' $PBTEST/pb"
+sudopbtest "PBVCSOPT=\"$VCSOPT\" pb -r 2.5 -V 2.6 newver"
+# We now need to adapt tar file,log ... to a 2.6 content
+#sudopbtest "pb -r 2.6 sbx2pkg"
+
+# need tobe part of group video for KVM
+sudocmd "grep -Eq '^video:' /etc/group" | grep $PBUSER
+if [ $? -ne 0 ]; then
+	sudocmd "perl -pi -e 's|^(video:.*)$|$1,$ENV{'PBUSER'}|' /etc/shadow"
+fi
+d=mageia-2-i386
+sudopbtest "qemu-img create -f qcow2 $PBTEST/vm/$d.qemu 72G"
+sudopbtest "sudo qemu-kvm -m 1024 -kernel /pub/mageia/distrib/2/i586/isolinux/alt0/vmlinuz -initrd /pub/mageia/distrib/2/i586/isolinux/alt0/all.rdz -append "ramdisk_size=128000 root=/dev/ram3 kickstart=http://192.168.8.55/pub/ks/guerrero/ks.pl automatic=method:http,server:192.168.8.55,directory:/pub/mageia/distrib/2/i586,network:dhcp" -drive file=$PBTEST/vm/$d.qemu,if=virtio,media=disk -boot once=n -redir tcp:2200:10.0.2.15:22"
+sudopbtest "pb -p pb -r devel -m $d sbx2setupvm"
+sudopbtest "pb -p pb -m $d snapvm"
+sudopbtest "pb -m $d sbx2vm"
+
+# test also with MondoRescue
+pb -p mondorescue -r branches/3.0 cms2pkg
+
+# cleanup
+sudopbtest "pb clean"
+sudopbtest "killall svnserve" 1
+exit

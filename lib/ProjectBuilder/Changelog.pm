@@ -65,6 +65,7 @@ my $dtype = $pb->{'pbos'}->{'type'};
 my $pbrealpkg = $pb->{'realpkg'};
 my $pbver = $pb->{'ver'};
 my $pbtag = $pb->{'tag'};
+my $pbextdir = $pb->{'extdir'};
 my $pbsuf = $pb->{'pbos'}->{'suffix'};
 my $OUTPUT = shift;
 my $doit = shift;
@@ -108,6 +109,8 @@ if (((not defined $chglog) || (! -f $chglog)) && ($doit ne "yes")) {
 	$date = strftime("%Y-%m-%d", @date);
 	$ndate = &UnixDate($date,"%a", "%b", "%d", "%Y");
 	$n2date = &UnixDate($date,"%a, %d %b %Y %H:%M:%S %z");
+	# usefule mostly for test versions
+	$pbver .= $pbextdir;
 	if ($dtype eq "rpm") {
 		$ver2 = "$pbver-$pbtag";
 		print $OUTPUT "* $ndate $pbpackager->{$ENV{'PBPROJ'}} $ver2\n";
@@ -150,6 +153,7 @@ my $first=1;
 # Handle each block separated by newline
 while (<INPUT>) {
 	($ver, $date) = split(/ /);
+	# In case there is a v before the real version string
 	$ver =~ s/^v//;
 	chomp($date);
 	$date =~ s/\(([0-9-]+)\)/$1/;
@@ -161,7 +165,7 @@ while (<INPUT>) {
 	pb_log(3,"**Ver:$ver**\n");
 	if ($ver !~ /-/) {
 		if ($first eq 1) {
-			$ver2 = "$ver-$pbtag";
+			$ver2 = "$ver$pbextdir-$pbtag";
 			$first = 0;
 		} else {
 			$ver2 = "$ver-1";

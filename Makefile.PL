@@ -6,7 +6,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME         => 'pb',
     DISTNAME     => 'project-builder',
-    VERSION      => '0.11.3',
+    VERSION      => '0.12.2',
     INST_SCRIPT  => 'blib/bin',
 	INSTALLDIRS  => 'perl',
     PREREQ_PM    => {
@@ -17,8 +17,8 @@ WriteMakefile(
     AUTHOR        => 'Bruno Cornec <bruno#project-builder.org>',
 	EXE_FILES     => [ qw( bin/pb bin/pbg bin/pbvi ) ],
 	MAN1PODS      => { 'bin/pb' => '$(INST_MAN1DIR)/pb.$(MAN1EXT)', },
-	MAN3PODS      => {	'lib/ProjectBuilder/CMS.pm' => '$(INST_MAN3DIR)/ProjectBuilder::CMS.$(MAN3EXT)',
-						'lib/ProjectBuilder/Filter.pm' => '$(INST_MAN3DIR)/ProjectBuilder::Filter.$(MAN3EXT)',
-						'lib/ProjectBuilder/Changelog.pm' => '$(INST_MAN3DIR)/ProjectBuilder::Changelog.$(MAN3EXT)',
-						'lib/ProjectBuilder/Env.pm' => '$(INST_MAN3DIR)/ProjectBuilder::Env.$(MAN3EXT)', },
+	#MAN3PODS      => {	'lib/ProjectBuilder/CMS.pm' => '$(INST_MAN3DIR)/ProjectBuilder::CMS.$(MAN3EXT)',
+	#'lib/ProjectBuilder/Filter.pm' => '$(INST_MAN3DIR)/ProjectBuilder::Filter.$(MAN3EXT)',
+	#'lib/ProjectBuilder/Changelog.pm' => '$(INST_MAN3DIR)/ProjectBuilder::Changelog.$(MAN3EXT)',
+	#},
 );

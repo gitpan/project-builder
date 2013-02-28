@@ -6,12 +6,14 @@
 #
 # $Id$
 #
-# Copyright B. Cornec 2007
+# Copyright B. Cornec 2007-2012
+# Eric Anderson's changes are (c) Copyright 2012 Hewlett Packard
 # Provided under the GPL v2
 
 package ProjectBuilder::CMS;
 
 use strict 'vars';
+use Carp 'confess';
 use Data::Dumper;
 use English;
 use File::Basename;
@@ -21,6 +23,7 @@ use lib qw (lib);
 use ProjectBuilder::Version;
 use ProjectBuilder::Base;
 use ProjectBuilder::Conf;
+use ProjectBuilder::VCS;
 
 # Inherit from the "Exporter" module which handles exporting functions.
  
@@ -31,7 +34,7 @@ use Exporter;
 # any code which uses this module.
  
 our @ISA = qw(Exporter);
-our @EXPORT = qw(pb_cms_init pb_cms_export pb_cms_get_uri pb_cms_copy pb_cms_checkout pb_cms_up pb_cms_checkin pb_cms_isdiff pb_cms_get_pkg pb_cms_get_real_pkg pb_cms_compliant pb_cms_log pb_cms_add);
+our @EXPORT = qw(pb_cms_init pb_cms_checkin pb_cms_get_pkg pb_cms_get_real_pkg pb_cms_compliant pb_cms_log);
 ($VERSION,$REVISION) = pb_version_init();
 
 =pod
@@ -64,7 +67,7 @@ my $param = shift || undef;
 my ($pburl) = pb_conf_get("pburl");
 pb_log(2,"DEBUG: Project URL of $ENV{'PBPROJ'}: $pburl->{$ENV{'PBPROJ'}}\n");
 my ($scheme, $account, $host, $port, $path) = pb_get_uri($pburl->{$ENV{'PBPROJ'}});
-my $vcscmd = pb_cms_cmd($scheme);
+my $vcscmd = pb_vcs_cmd($scheme);
 
 my ($pbprojdir) = pb_conf_get_if("pbprojdir");
 
@@ -89,7 +92,7 @@ $tmp =~ s|^$ENV{'PBCONFDIR'}/||;
 # Check project cms compliance
 #
 my $turl = "$pburl->{$ENV{'PBPROJ'}}/$tmp";
-$turl = $pburl->{$ENV{'PBPROJ'}} if (($scheme =~ /^file/) || ($scheme =~ /^(ht|f)tp/));
+$turl = $pburl->{$ENV{'PBPROJ'}} if ($scheme =~ /^(flat)|(ftp)|(http)|(file)\b/o);
 pb_cms_compliant(undef,'PBDIR',"$ENV{'PBPROJDIR'}/$tmp",$turl,$pbinit);
 
 
@@ -105,7 +108,7 @@ if ($scheme =~ /^hg/) {
 	$tmp =~ s/^.* //;
 	$ENV{'PBREVISION'}=$tmp;
 	$ENV{'PBCMSLOGFILE'}="git.log";
-} elsif (($scheme =~ /^file/) || ($scheme eq "ftp") || ($scheme eq "http")) {
+} elsif ($scheme =~ /^(flat)|(ftp)|(http)|(file)\b/o) {
 	$ENV{'PBREVISION'}="flat";
 	$ENV{'PBCMSLOGFILE'}="flat.log";
 } elsif ($scheme =~ /^svn/) {
@@ -140,361 +143,6 @@ pb_log(1,"pb_cms_init returns $scheme,$pburl->{$ENV{'PBPROJ'}}\n");
 return($scheme,$pburl->{$ENV{'PBPROJ'}});
 }
 
-=item B<pb_cms_export>
-
-This function exports a CMS content to a directory.
-The first parameter is the URL of the CMS content.
-The second parameter is the directory in which it is locally exposed (result of a checkout). If undef, then use the original CMS content.
-The third parameter is the directory where we want to deliver it (result of export).
-It returns the original tar file if we need to preserve it and undef if we use the produced one.
-
-=cut
-
-sub pb_cms_export {
-
-my $uri = shift;
-my $source = shift;
-my $destdir = shift;
-my $tmp;
-my $tmp1;
-
-pb_log(1,"pb_cms_export uri: $uri - destdir: $destdir\n");
-pb_log(1,"pb_cms_export source: $source\n") if (defined $source);
-my @date = pb_get_date();
-# If it's not flat, then we have a real uri as source
-my ($scheme, $account, $host, $port, $path) = pb_get_uri($uri);
-my $vcscmd = pb_cms_cmd($scheme);
-$uri = pb_cms_mod_socks($uri);
-
-if ($scheme =~ /^svn/) {
-	if (defined $source) {
-		if (-d $source) {
-			$tmp = $destdir;
-		} else {
-			$tmp = "$destdir/".basename($source);
-		}
-		$source = pb_cms_mod_htftp($source,"svn");
-		pb_system("$vcscmd export $source $tmp","Exporting $source from $scheme to $tmp ");
-	} else {
-		$uri = pb_cms_mod_htftp($uri,"svn");
-		pb_system("$vcscmd export $uri $destdir","Exporting $uri from $scheme to $destdir ");
-	}
-} elsif ($scheme eq "svk") {
-	my $src = $source;
-	if (defined $source) {
-		if (-d $source) {
-			$tmp = $destdir;
-		} else {
-			$tmp = "$destdir/".basename($source);
-			$src = dirname($source);
-		}
-		$source = pb_cms_mod_htftp($source,"svk");
-		# This doesn't exist !
-		# pb_system("$vcscmd export $path $tmp","Exporting $path from $scheme to $tmp ");
-		pb_log(4,"$uri,$source,$destdir,$scheme, $account, $host, $port, $path,$tmp");
-		if (-d $source) {
-			pb_system("mkdir -p $tmp ; cd $tmp; tar -cf - -C $source . | tar xf -","Exporting $source from $scheme to $tmp ");
-		} else {
-			# If source is file do not use -C with source
-			pb_system("mkdir -p ".dirname($tmp)." ; cd ".dirname($tmp)."; tar -cf - -C $src ".basename($source)." | tar xf -","Exporting $src/".basename($source)." from $scheme to $tmp ");
-		}
-	} else {
-		# Look at svk admin hotcopy
-		die "Unable to export from svk without a source defined";
-	}
-} elsif ($scheme eq "dir") {
-	pb_system("cp -r $path $destdir","Copying $uri from DIR to $destdir ");
-} elsif (($scheme eq "http") || ($scheme eq "ftp")) {
-	my $f = basename($path);
-	unlink "$ENV{'PBTMP'}/$f";
-	pb_system("$vcscmd $ENV{'PBTMP'}/$f $uri","Downloading $uri with $vcscmd to $ENV{'PBTMP'}/$f\n");
-	# We want to preserve the original tar file
-	pb_cms_export("file://$ENV{'PBTMP'}/$f",$source,$destdir);
-	return("$ENV{'PBTMP'}/$f");
-} elsif ($scheme =~ /^file/) {
-	eval
-	{
-		require File::MimeInfo;
-		File::MimeInfo->import();
-	};
-	if ($@) {
-		# File::MimeInfo not found
-		die("ERROR: Install File::MimeInfo to handle scheme $scheme\n");
-	}
-
-	my $mm = mimetype($path);
-	pb_log(2,"mimetype: $mm\n");
-
-	# Check whether the file is well formed 
-	# (containing already a directory with the project-version name)
-	#
-	# If it's not the case, we try to adapt, but distro needing 
-	# to verify the checksum will have issues (Fedora)
-	# Then upstream should be notified that they need to change their rules
-	# This doesn't apply to patches or additional sources of course.
-	my ($pbwf) = pb_conf_get_if("pbwf");
-	if ((defined $pbwf) && (defined $pbwf->{$ENV{'PBPROJ'}}) && ($path !~ /\/pbpatch\//) && ($path !~ /\/pbsrc\//)) {
-		$destdir = dirname($destdir);
-		pb_log(2,"This is a well-formed file so destdir is now $destdir\n");
-	}
-	pb_mkdir_p($destdir);
-
-	if ($mm =~ /\/x-bzip-compressed-tar$/) {
-		# tar+bzip2
-		pb_system("cd $destdir ; tar xfj $path","Extracting $path in $destdir ");
-	} elsif ($mm =~ /\/x-lzma-compressed-tar$/) {
-		# tar+lzma
-		pb_system("cd $destdir ; tar xfY $path","Extracting $path in $destdir ");
-	} elsif ($mm =~ /\/x-compressed-tar$/) {
-		# tar+gzip
-		pb_system("cd $destdir ; tar xfz $path","Extracting $path in $destdir ");
-	} elsif ($mm =~ /\/x-tar$/) {
-		# tar
-		pb_system("cd $destdir ; tar xf $path","Extracting $path in $destdir ");
-	} elsif ($mm =~ /\/zip$/) {
-		# zip
-		pb_system("cd $destdir ; unzip $path","Extracting $path in $destdir ");
-	} else {
-		# simple file: copy it (patch e.g.)
-		copy($path,$destdir);
-	}
-} elsif ($scheme =~ /^hg/) {
-	if (defined $source) {
-		if (-d $source) {
-			$tmp = $destdir;
-		} else {
-			$tmp = "$destdir/".basename($source);
-		}
-		$source = pb_cms_mod_htftp($source,"hg");
-		pb_system("cd $source ; $vcscmd archive $tmp","Exporting $source from Mercurial to $tmp ");
-	} else {
-		$uri = pb_cms_mod_htftp($uri,"hg");
-		pb_system("$vcscmd clone $uri $destdir","Exporting $uri from Mercurial to $destdir ");
-	}
-} elsif ($scheme =~ /^git/) {
-	if (defined $source) {
-		if (-d $source) {
-			$tmp = $destdir;
-		} else {
-			$tmp = "$destdir/".basename($source);
-		}
-		$source = pb_cms_mod_htftp($source,"git");
-		pb_system("cd $source ; $vcscmd archive --format=tar HEAD | (mkdir $tmp && cd $tmp && tar xf -)","Exporting $source/HEAD from GIT to $tmp ");
-	} else {
-		$uri = pb_cms_mod_htftp($uri,"git");
-		pb_system("$vcscmd clone $uri $destdir","Exporting $uri from GIT to $destdir ");
-	}
-} elsif ($scheme =~ /^cvs/) {
-	# CVS needs a relative path !
-	my $dir=dirname($destdir);
-	my $base=basename($destdir);
-	if (defined $source) {
-		# CVS also needs a modules name not a dir
-		$tmp1 = basename($source);
-	} else {
-		# Probably not right, should be checked, but that way I'll notice it :-)
-		pb_log(0,"You're in an untested part of project-builder.org, please report any result upstream\n");
-		$tmp1 = $uri;
-	}
-	# If we're working on the CVS itself
-	my $cvstag = basename($ENV{'PBROOTDIR'});
-	my $cvsopt = "";
-	if ($cvstag eq "cvs") {
-		my $pbdate = strftime("%Y-%m-%d %H:%M:%S", @date);
-		$cvsopt = "-D \"$pbdate\"";
-	} else {
-		# we're working on a tag which should be the last part of PBROOTDIR
-		$cvsopt = "-r $cvstag";
-	}
-	pb_system("cd $dir ; $vcscmd -d $account\@$host:$path export $cvsopt -d $base $tmp1","Exporting $tmp1 from $source under CVS to $destdir ");
-} else {
-	die "cms $scheme unknown";
-}
-return(undef);
-}
-
-=item B<pb_cms_get_uri>
-
-This function is only called with a real CMS system and gives the URL stored in the checked out directory.
-The first parameter is the schema of the CMS systems (svn, cvs, svn+ssh, ...)
-The second parameter is the directory in which it is locally exposed (result of a checkout).
-
-=cut
-
-sub pb_cms_get_uri {
-
-my $scheme = shift;
-my $dir = shift;
-
-my $res = "";
-my $void = "";
-my $vcscmd = pb_cms_cmd($scheme);
-
-if ($scheme =~ /^svn/) {
-	open(PIPE,"LANGUAGE=C $vcscmd info $dir |") || return("");
-	while (<PIPE>) {
-		($void,$res) = split(/^URL:/) if (/^URL:/);
-	}
-	$res =~ s/^\s*//;
-	close(PIPE);
-	chomp($res);
-} elsif ($scheme =~ /^svk/) {
-	open(PIPE,"LANGUAGE=C $vcscmd info $dir |") || return("");
-	my $void2 = "";
-	while (<PIPE>) {
-		($void,$void2,$res) = split(/ /) if (/^Depot/);
-	}
-	$res =~ s/^\s*//;
-	close(PIPE);
-	chomp($res);
-} elsif ($scheme =~ /^hg/) {
-	open(HGRC,".hg/hgrc/") || return("");
-	while (<HGRC>) {
-		($void,$res) = split(/^default.*=/) if (/^default.*=/);
-	}
-	close(HGRC);
-	chomp($res);
-} elsif ($scheme =~ /^git/) {
-	open(GITRC,".git/gitrc/") || return("");
-	while (<GITRC>) {
-		($void,$res) = split(/^default.*=/) if (/^default.*=/);
-	}
-	close(GITRC);
-	chomp($res);
-} elsif ($scheme =~ /^cvs/) {
-	# This path is always the root path of CVS, but we may be below
-	open(FILE,"$dir/CVS/Root") || die "$dir isn't CVS controlled";
-	$res = <FILE>;
-	chomp($res);
-	close(FILE);
-	# Find where we are in the tree
-	my $rdir = $dir;
-	while ((! -d "$rdir/CVSROOT") && ($rdir ne "/")) {
-		$rdir = dirname($rdir);
-	}
-	die "Unable to find a CVSROOT dir in the parents of $dir" if (! -d "$rdir/CVSROOT");
-	#compute our place under that root dir - should be a relative path
-	$dir =~ s|^$rdir||;
-	my $suffix = "";
-	$suffix = "$dir" if ($dir ne "");
-
-	my $prefix = "";
-	if ($scheme =~ /ssh/) {
-		$prefix = "cvs+ssh://";
-	} else {
-		$prefix = "cvs://";
-	}
-	$res = $prefix.$res.$suffix;
-} else {
-	die "cms $scheme unknown";
-}
-pb_log(1,"pb_cms_get_uri returns $res\n");
-return($res);
-}
-
-=item B<pb_cms_copy>
-
-This function copies a CMS content to another.
-The first parameter is the schema of the CMS systems (svn, cvs, svn+ssh, ...)
-The second parameter is the URL of the original CMS content.
-The third parameter is the URL of the destination CMS content.
-
-Only coded for SVN now as used for pbconf itself not the project
-
-=cut
-
-sub pb_cms_copy {
-my $scheme = shift;
-my $oldurl = shift;
-my $newurl = shift;
-my $vcscmd = pb_cms_cmd($scheme);
-$oldurl = pb_cms_mod_socks($oldurl);
-$newurl = pb_cms_mod_socks($newurl);
-
-if ($scheme =~ /^svn/) {
-	$oldurl = pb_cms_mod_htftp($oldurl,"svn");
-	$newurl = pb_cms_mod_htftp($newurl,"svn");
-	pb_system("$vcscmd copy -m \"Creation of $newurl from $oldurl\" $oldurl $newurl","Copying $oldurl to $newurl ");
-} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
-} else {
-	die "cms $scheme unknown for project management";
-}
-}
-
-=item B<pb_cms_checkout>
-
-This function checks a CMS content out to a directory.
-The first parameter is the schema of the CMS systems (svn, cvs, svn+ssh, ...)
-The second parameter is the URL of the CMS content.
-The third parameter is the directory where we want to deliver it (result of export).
-
-=cut
-
-sub pb_cms_checkout {
-my $scheme = shift;
-my $url = shift;
-my $destination = shift;
-my $vcscmd = pb_cms_cmd($scheme);
-$url = pb_cms_mod_socks($url);
-
-if ($scheme =~ /^svn/) {
-	$url = pb_cms_mod_htftp($url,"svn");
-	pb_system("$vcscmd co $url $destination","Checking out $url to $destination ");
-} elsif ($scheme =~ /^svk/) {
-	$url = pb_cms_mod_htftp($url,"svk");
-	pb_system("$vcscmd co $url $destination","Checking out $url to $destination ");
-} elsif ($scheme =~ /^hg/) {
-	$url = pb_cms_mod_htftp($url,"hg");
-	pb_system("$vcscmd clone $url $destination","Checking out $url to $destination ");
-} elsif ($scheme =~ /^git/) {
-	$url = pb_cms_mod_htftp($url,"git");
-	pb_system("$vcscmd clone $url $destination","Checking out $url to $destination ");
-} elsif (($scheme eq "ftp") || ($scheme eq "http")) {
-	return;
-} elsif ($scheme =~ /^cvs/) {
-	my ($scheme, $account, $host, $port, $path) = pb_get_uri($url);
-
-	# If we're working on the CVS itself
-	my $cvstag = basename($ENV{'PBROOTDIR'});
-	my $cvsopt = "";
-	if ($cvstag eq "cvs") {
-		my @date = pb_get_date();
-		my $pbdate = strftime("%Y-%m-%d %H:%M:%S", @date);
-		$cvsopt = "-D \"$pbdate\"";
-	} else {
-		# we're working on a tag which should be the last part of PBROOTDIR
-		$cvsopt = "-r $cvstag";
-	}
-	pb_mkdir_p("$destination");
-	pb_system("cd $destination ; $vcscmd -d $account\@$host:$path co $cvsopt .","Checking out $url to $destination ");
-} elsif ($scheme =~ /^file/) {
-	pb_cms_export($url,undef,$destination);
-} else {
-	die "cms $scheme unknown";
-}
-}
-
-=item B<pb_cms_up>
-
-This function updates a local directory with the CMS content.
-The first parameter is the schema of the CMS systems (svn, cvs, svn+ssh, ...)
-The second parameter is the directory to update.
-
-=cut
-
-sub pb_cms_up {
-my $scheme = shift;
-my $dir = shift;
-my $vcscmd = pb_cms_cmd($scheme);
-
-if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
-	pb_system("$vcscmd up $dir","Updating $dir ");
-} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
-} else {
-	die "cms $scheme unknown";
-}
-}
-
 =item B<pb_cms_checkin>
 
 This function updates a CMS content from a local directory.
@@ -508,72 +156,12 @@ sub pb_cms_checkin {
 my $scheme = shift;
 my $dir = shift;
 my $pbinit = shift || undef;
-my $vcscmd = pb_cms_cmd($scheme);
 
 my $ver = basename($dir);
 my $msg = "updated to $ver";
-$msg = "Project $ENV{PBPROJ} creation" if (defined $pbinit);
+$msg = "Project $ENV{'PBPROJ'} creation" if (defined $pbinit);
 
-if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
-	pb_system("cd $dir ; $vcscmd ci -m \"$msg\" .","Checking in $dir ");
-} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
-} else {
-	die "cms $scheme unknown";
-}
-pb_cms_up($scheme,$dir);
-}
-
-=item B<pb_cms_add>
-
-This function adds to a CMS content from a local directory.
-The first parameter is the schema of the CMS systems (svn, cvs, svn+ssh, ...)
-The second parameter is the directory/file to add.
-
-=cut
-
-sub pb_cms_add {
-my $scheme = shift;
-my $f = shift;
-my $vcscmd = pb_cms_cmd($scheme);
-
-if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
-	pb_system("$vcscmd add $f","Adding $f to VCS ");
-} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
-} else {
-	die "cms $scheme unknown";
-}
-pb_cms_up($scheme,$f);
-}
-
-=item B<pb_cms_isdiff>
-
-This function returns a integer indicating the number f differences between the CMS content and the local directory where it's checked out.
-The first parameter is the schema of the CMS systems (svn, cvs, svn+ssh, ...)
-The second parameter is the directory to consider.
-
-=cut
-
-sub pb_cms_isdiff {
-my $scheme = shift;
-my $dir =shift;
-my $vcscmd = pb_cms_cmd($scheme);
-my $l = undef;
-
-if (($scheme =~ /^svn/) || ($scheme =~ /^cvs/) || ($scheme =~ /^svk/)) {
-	open(PIPE,"$vcscmd diff $dir |") || die "Unable to get $vcscmd diff from $dir";
-	$l = 0;
-	while (<PIPE>) {
-		# Skipping normal messages in case of CVS
-		next if (/^cvs diff:/);
-		$l++;
-	}
-} elsif (($scheme eq "flat") || ($scheme eq "ftp") || ($scheme eq "http"))   {
-	$l = 0;
-} else {
-	die "cms $scheme unknown";
-}
-pb_log(1,"pb_cms_isdiff returns $l\n");
-return($l);
+pb_vcs_checkin($scheme,$dir,$msg);
 }
 
 =item B<pb_cms_get_pkg>
@@ -641,7 +229,7 @@ if (defined $type) {
 	}
 }
 
-pb_log(1,"pb_cms_get_real_pkg returns $pbpkgreal\n");
+pb_log(2,"pb_cms_get_real_pkg returns $pbpkgreal\n");
 return($pbpkgreal);
 }
 
@@ -706,16 +294,16 @@ if (($scheme !~ /^cvs/) && ($scheme !~ /^svn/) && ($scheme !~ /^svk/) && ($schem
 	# Create structure and remove end dir before exporting
 	pb_mkdir_p("$ENV{$envar}");
 	pb_rm_rf($ENV{$envar});
-	pb_cms_checkout($scheme,$uri,$ENV{$envar});
+	pb_vcs_checkout($scheme,$uri,$ENV{$envar});
 } else {
 	pb_log(1,"$uri found locally, checking content\n");
-	my $cmsurl = pb_cms_get_uri($scheme,$ENV{$envar});
+	my $cmsurl = pb_vcs_get_uri($scheme,$ENV{$envar});
 	my ($scheme2, $account2, $host2, $port2, $path2) = pb_get_uri($cmsurl);
 	# For svk, scheme doesn't appear in svk info so remove it here in uri coming from conf file 
 	# which needs it to trigger correct behaviour
 	$uri =~ s/^svk://;
 	if (($scheme2 =~ /^git/) || ($scheme2 =~ /^hg/)) {
-		# These VCS manages branches internally not with different tree structures
+		# These VCS manage branches internally not with different tree structures
 		# Assuming it's correct for now.
 	} elsif ($cmsurl ne $uri) {
 		# The local content doesn't correpond to the repository
@@ -799,11 +387,11 @@ my $authors = shift;
 my $testver = shift || undef;
 
 pb_cms_create_authors($authors,$dest,$scheme);
-my $vcscmd = pb_cms_cmd($scheme);
+my $vcscmd = pb_vcs_cmd($scheme);
 
 if ((defined $testver) && (defined $testver->{$ENV{'PBPROJ'}}) && ($testver->{$ENV{'PBPROJ'}} =~ /true/i)) {
 	if (! -f "$dest/ChangeLog") {
-		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
+		open(CL,"> $dest/ChangeLog") || confess "Unable to create $dest/ChangeLog";
 		# We need a minimal version for debian type of build
 		print CL "\n";
 		print CL "\n";
@@ -826,7 +414,7 @@ if (! -f "$dest/ChangeLog") {
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
 		my $command = pb_check_req("svn2cl",1);
-		if (-x $command) {
+		if ((defined $command) && (-x $command)) {
 			pb_system("$command --group-by-day --authors=$authors -i -o $dest/ChangeLog $pkgdir","Generating ChangeLog from SVN with svn2cl");
 		} else {
 			# To be written from pbcl
@@ -844,7 +432,7 @@ if (! -f "$dest/ChangeLog") {
 		open(CL,"> $dest/ChangeLog") || die "Unable to create $dest/ChangeLog";
 		close(CL);
 		pb_system("$vcscmd log -v $pkgdir > $dest/$ENV{'PBCMSLOGFILE'}","Extracting log info from GIT");
-	} elsif (($scheme =~ /^file/) || ($scheme eq "dir") || ($scheme eq "http") || ($scheme eq "ftp")) {
+	} elsif ($scheme =~ /^(flat)|(ftp)|(http)|(file)|(dir)\b/o) {
 		pb_system("echo ChangeLog for $pkgdir > $dest/ChangeLog","Empty ChangeLog file created");
 	} elsif ($scheme =~ /^cvs/) {
 		my $tmp=basename($pkgdir);
@@ -867,67 +455,6 @@ if (! -f "$dest/ChangeLog") {
 	copy("$dest/$ENV{'PBCMSLOGFILE'}","$dest/ChangeLog");
 }
 }
-
-sub pb_cms_mod_htftp {
-
-my $url = shift;
-my $proto = shift;
-
-$url =~ s/^$proto\+((ht|f)tp[s]*):/$1:/;
-pb_log(1,"pb_cms_mod_htftp returns $url\n");
-return($url);
-}
-
-sub pb_cms_mod_socks {
-
-my $url = shift;
-
-$url =~ s/^([A-z0-9]+)\+(socks):/$1:/;
-pb_log(1,"pb_cms_mod_socks returns $url\n");
-return($url);
-}
-
-
-sub pb_cms_cmd {
-
-my $scheme = shift;
-my $cmd = "";
-
-# If there is a socks proxy to use
-if ($scheme =~ /socks/) {
-	# Get the socks proxy command from the conf file
-	my ($pbsockscmd) = pb_conf_get("pbsockscmd");
-	$cmd = "$pbsockscmd->{$ENV{'PBPROJ'}} ";
-}
-
-if ($scheme =~ /hg/) {
-	return($cmd."hg")
-} elsif ($scheme =~ /git/) {
-	return($cmd."git")
-} elsif ($scheme =~ /svn/) {
-	return($cmd."svn")
-} elsif ($scheme =~ /svk/) {
-	return($cmd."svk")
-} elsif ($scheme =~ /cvs/) {
-	return($cmd."cvs")
-} elsif (($scheme =~ /http/) || ($scheme =~ /ftp/)) {
-	my $command = pb_check_req("wget",1);
-	if (-x $command) {
-		return($cmd."$command -nv -O ");
-	} else {
-		$command = pb_check_req("curl",1);
-		if (-x $command) {
-			return($cmd."$command -o ");
-		} else {
-			die "Unable to handle $scheme.\nNo wget/curl available, please install one of those";
-		}
-	}
-} else {
-	return($cmd);
-}
-}
-
-	
 
 =back 
 
